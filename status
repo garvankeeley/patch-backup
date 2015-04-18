@@ -1,0 +1,6 @@
+6a0dfb9e1fa0e2bbe40a7c2261dcbd04e559800f:bug1155237-part1-remove-contextless-access-to-netutils.diff
+1b4f37c343af8c67825b057579abf510cbbd2f6c:bug1155237-part2-make-upload-service-nonsticky.diff
+2ce631f82624a45d9232f43fa9a7eb117c242d6b:bug1145111_static_cache_loc.diff
+927b50d9d386c267c4006fe1ffdd350f7151cb5c:xcode1063329-p1-add-option-to-backend.diff
+bc7606bb6f646f5592b046582bb7fa63dc0de84e:xcode1063329-p2-add-ancillary-files.diff
+2d40c4cc416a22926264d049ff3ec04b8934ceb8:xcode1063329-p3-add-xcode_backend.py

@@ -1,0 +1,32 @@
+# HG changeset patch
+# User Garvan Keeley <gkeeley@mozilla.com>
+# Parent  31299c20405d68fa6c3727eaa4cadd749d295784
+Bug 1155237 - Part 2, make upload service non-sticky. r=rnewman
+
+diff --git a/mobile/android/stumbler/java/org/mozilla/mozstumbler/service/uploadthread/UploadAlarmReceiver.java b/mobile/android/stumbler/java/org/mozilla/mozstumbler/service/uploadthread/UploadAlarmReceiver.java
+--- a/mobile/android/stumbler/java/org/mozilla/mozstumbler/service/uploadthread/UploadAlarmReceiver.java
++++ b/mobile/android/stumbler/java/org/mozilla/mozstumbler/service/uploadthread/UploadAlarmReceiver.java
+@@ -35,20 +35,22 @@ public class UploadAlarmReceiver extends
+     private static boolean sIsAlreadyScheduled;
+ 
+     public UploadAlarmReceiver() {}
+ 
+     public static class UploadAlarmService extends IntentService {
+ 
+         public UploadAlarmService(String name) {
+             super(name);
++            // makes the service START_NOT_STICKY, that is, the service is not auto-restarted
++            setIntentRedelivery(false);
+         }
+ 
+         public UploadAlarmService() {
+-            super(LOG_TAG);
++            this(LOG_TAG);
+         }
+ 
+         @Override
+         protected void onHandleIntent(Intent intent) {
+             if (intent == null) {
+                 return;
+             }
+             boolean isRepeating = intent.getBooleanExtra(EXTRA_IS_REPEATING, true);
