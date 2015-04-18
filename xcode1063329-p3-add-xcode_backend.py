@@ -1,6 +1,6 @@
 # HG changeset patch
 # User Garvan Keeley <gkeeley@mozilla.com>
-# Parent  f7f8a318f64186277818d6c74155402cce20f5fa
+# Parent  bc7606bb6f646f5592b046582bb7fa63dc0de84e
 Bug 1063329 - Part 3, add xcode_packend.py, the project generator
 
 diff --git a/media/libstagefright/ports/win32/include/unistd.h b/media/libstagefright/ports/win32/include/unistd.h
@@ -34,7 +34,7 @@ diff --git a/python/mozbuild/mozbuild/backend/xcode_backend.py b/python/mozbuild
 new file mode 100644
 --- /dev/null
 +++ b/python/mozbuild/mozbuild/backend/xcode_backend.py
-@@ -0,0 +1,288 @@
+@@ -0,0 +1,281 @@
 +# This Source Code Form is subject to the terms of the Mozilla Public
 +# License, v. 2.0. If a copy of the MPL was not distributed with this
 +# file, You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -67,8 +67,7 @@ new file mode 100644
 +
 +        if flags:
 +            self._per_dir_sources_and_flags[directory][file]['flags'] += ' ' + flags
-+            if 'MOZILLA_EXTERNAL_LINKAGE' in flags:
-+                print 'MOZILLA_EXTERNAL_LINKAGE'
++
 +        # look for a matching header file
 +        if file[-2:] == '.h':
 +            return
@@ -86,10 +85,6 @@ new file mode 100644
 +            existing = self._per_dir_defines_includes_and_flags[directory]
 +            args = [x for x in set_of_build_args if x not in existing]
 +            self._per_dir_defines_includes_and_flags[directory].extend(args)
-+
-+        for x in set_of_build_args:
-+            if 'WEBRTC_POSIX' in x and 'audio_processing' in directory:
-+                print directory +' has WEBRTC_POSIX'
 +
 +    def _init(self):
 +        self._per_dir_defines_includes_and_flags = {}
@@ -229,8 +224,6 @@ new file mode 100644
 +                    self.add_per_dir_source_and_flags(module_dir, unified_file, self._topobjdir, obj.relobjdir, flags=mystery_include)
 +            else:
 +                for f in obj.files:
-+                    if 'noise_suppression_impl' in f:
-+                        print "h"
 +                    self.add_per_dir_source_and_flags(module_dir, f, self._topsrcdir, obj.relobjdir)
 +
 +        elif isinstance(obj, LocalInclude) or isinstance(obj, GeneratedInclude):
