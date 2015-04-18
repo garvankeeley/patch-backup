@@ -1,6 +1,6 @@
 # HG changeset patch
 # User Garvan Keeley <gkeeley@mozilla.com>
-# Parent  bc7606bb6f646f5592b046582bb7fa63dc0de84e
+# Parent  97e949f535e129d2a1a933e1f8ad603fa5775a1f
 Bug 1063329 - Part 3, add xcode_packend.py, the project generator
 
 diff --git a/media/libstagefright/ports/win32/include/unistd.h b/media/libstagefright/ports/win32/include/unistd.h
@@ -34,7 +34,7 @@ diff --git a/python/mozbuild/mozbuild/backend/xcode_backend.py b/python/mozbuild
 new file mode 100644
 --- /dev/null
 +++ b/python/mozbuild/mozbuild/backend/xcode_backend.py
-@@ -0,0 +1,281 @@
+@@ -0,0 +1,282 @@
 +# This Source Code Form is subject to the terms of the Mozilla Public
 +# License, v. 2.0. If a copy of the MPL was not distributed with this
 +# file, You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -53,38 +53,6 @@ new file mode 100644
 +class XcodeBackend(CommonBackend):
 +    """Backend that generates XCode project files.
 +    """
-+
-+    def add_per_dir_source_and_flags(self, directory, file, abs_src_path, relobjdir, is_built=True, flags=''):
-+        # some files can arrive as a full path to file
-+        if abs_src_path in file:
-+            file = file.replace(abs_src_path + '/', '').replace(directory + '/', '')
-+
-+        if directory not in self._per_dir_sources_and_flags:
-+            self._per_dir_sources_and_flags[directory] = {}
-+        if file not in self._per_dir_sources_and_flags[directory]:
-+            self._per_dir_sources_and_flags[directory][file] = {'abs_src_path': abs_src_path, 'is_built': is_built,
-+                                                                'flags': flags, 'relobjdir': relobjdir}
-+
-+        if flags:
-+            self._per_dir_sources_and_flags[directory][file]['flags'] += ' ' + flags
-+
-+        # look for a matching header file
-+        if file[-2:] == '.h':
-+            return
-+
-+        header_file = file.rsplit(".", 1)[0] + ".h"
-+        for src_path in (self._topsrcdir, self._topobjdir):
-+            if os.path.exists(os.path.join(src_path, directory + '/' + header_file)):
-+                self.add_per_dir_source_and_flags(directory, header_file, src_path, relobjdir)
-+                break
-+
-+    def add_per_relobjdir_build_args(self, directory, set_of_build_args):
-+        if directory not in self._per_dir_defines_includes_and_flags:
-+            self._per_dir_defines_includes_and_flags[directory] = list(set_of_build_args)
-+        else:
-+            existing = self._per_dir_defines_includes_and_flags[directory]
-+            args = [x for x in set_of_build_args if x not in existing]
-+            self._per_dir_defines_includes_and_flags[directory].extend(args)
 +
 +    def _init(self):
 +        self._per_dir_defines_includes_and_flags = {}
@@ -113,7 +81,7 @@ new file mode 100644
 +        PBXFileReference.types['.cxx'] = ('sourcecode.cpp.cpp', 'PBXSourcesBuildPhase')
 +
 +        def detailed(summary):
-+            return ('Generates XCode project. Project will mostly compile, and is useful for editing.' +
++            return ('Generates XCode project. Files will compile, predictively show errors, and code-complete.' +
 +                    ' Actually building Firefox still requires command-line mach.')
 +
 +        self.summary.backend_detailed_summary = types.MethodType(detailed, self.summary)
@@ -134,19 +102,19 @@ new file mode 100644
 +            self._topobjdir = obj.topobjdir
 +
 +        if isinstance(obj, DirectoryTraversal):
-+            self.add_per_relobjdir_build_args(obj.relobjdir,
++            self._add_per_relobjdir_build_args(obj.relobjdir,
 +                                        {'-I' + obj.srcdir,
 +                                         '-DDEBUG',
 +                                         '-DMOZ_APP_VERSION=\\"' + obj.config.substs["MOZ_APP_VERSION"] + '\\"'})
 +
 +            objinc = self._topobjdir + "/" + module_dir
 +            if os.path.exists(objinc):
-+                self.add_per_relobjdir_build_args(obj.relobjdir, {'-I' + objinc})
++                self._add_per_relobjdir_build_args(obj.relobjdir, {'-I' + objinc})
 +
 +            def parse_prefix_and_defines(flags, current_dir):
 +                result = set()
 +                flag_list = flags.split(' ')
-+                for i in range(0, flag_list.__len__()):
++                for i in range(0, len(flag_list)):
 +                    if flag_list[i][:2] in ('-D', '-U', '-I'):
 +                        result.add(flag_list[i])
 +                    if flag_list[i].startswith('-include'):
@@ -155,11 +123,11 @@ new file mode 100644
 +                return result
 +
 +            build_args = parse_prefix_and_defines(obj.config.substs['OS_COMPILE_CFLAGS'], obj.topobjdir)
-+            self.add_per_relobjdir_build_args(obj.relobjdir, build_args)
++            self._add_per_relobjdir_build_args(obj.relobjdir, build_args)
 +
 +            # todo: mystery as to why this is missing
 +            if 'gfx' in module_dir:
-+                self.add_per_relobjdir_build_args(obj.relobjdir, {'-I' + os.path.join(self._topobjdir, 'dist/include/cairo')})
++                self._add_per_relobjdir_build_args(obj.relobjdir, {'-I' + os.path.join(self._topobjdir, 'dist/include/cairo')})
 +
 +        if isinstance(obj, Exports):
 +            for path, files in obj.exports.walk():
@@ -167,7 +135,7 @@ new file mode 100644
 +                    continue
 +
 +                for f in files:
-+                    self.add_per_dir_source_and_flags(module_dir, f, self._topobjdir, obj.relobjdir, True)
++                    self._add_per_dir_source_and_flags(module_dir, f, self._topobjdir, obj.relobjdir, True)
 +
 +        elif isinstance(obj, VariablePassthru):
 +
@@ -194,37 +162,40 @@ new file mode 100644
 +            added_flags = {x for x in added_flags if not re.match(r'\S+\.js|\S+\.manifest|\S+\.py|\S+\.cpp', x)}
 +            if '-std=c99' in added_flags:
 +                added_flags.remove('-std=c99')
-+            self.add_per_relobjdir_build_args(obj.relobjdir, added_flags)
++            self._add_per_relobjdir_build_args(obj.relobjdir, added_flags)
 +
 +        elif isinstance(obj, PerSourceFlag):
-+            self.add_per_dir_source_and_flags(module_dir, obj.file_name, self._topsrcdir, obj.relobjdir, True, ' '.join(obj.flags))
++            self._add_per_dir_source_and_flags(module_dir, obj.file_name, self._topsrcdir, obj.relobjdir, True, ' '.join(obj.flags))
 +
 +        elif isinstance(obj, StaticLibrary):
 +            flags = set(obj.defines.get_defines())
 +            if not flags:
 +                return
-+            self.add_per_relobjdir_build_args(obj.relobjdir, flags)
++            self._add_per_relobjdir_build_args(obj.relobjdir, flags)
 +
 +        elif isinstance(obj, Defines):
-+            self.add_per_relobjdir_build_args(obj.relobjdir, set(obj.get_defines()))
++            self._add_per_relobjdir_build_args(obj.relobjdir, set(obj.get_defines()))
 +
 +        elif isinstance(obj, Sources) or isinstance(obj, GeneratedSources) \
 +                or isinstance(obj, HostSources) or isinstance(obj, UnifiedSources):
 +
 +            if isinstance(obj, UnifiedSources):
 +                for f in obj.files:
-+                    self.add_per_dir_source_and_flags(module_dir, f, self._topsrcdir, obj.relobjdir, is_built=False)
++                    self._add_per_dir_source_and_flags(module_dir, f, self._topsrcdir, obj.relobjdir, is_built=False)
 +                for file_map in obj.unified_source_mapping:
 +                    unified_file = file_map[0]
-+                    self.add_per_dir_source_and_flags(module_dir, unified_file, self._topobjdir, obj.relobjdir, is_built=True)
++                    self._add_per_dir_source_and_flags(module_dir, unified_file,
++                                                       self._topobjdir, obj.relobjdir, is_built=True)
 +
-+                # todo looking at the preprocessed ooutput, unistd is present, however, without this mystery include compilation fails
++                # todo looking at the preprocessed output, unistd is present, however,
++                # without this mystery include, compilation fails
 +                if 'Unified_cpp_xpcom_build2' in unified_file:
 +                    mystery_include = ' -include unistd.h '
-+                    self.add_per_dir_source_and_flags(module_dir, unified_file, self._topobjdir, obj.relobjdir, flags=mystery_include)
++                    self._add_per_dir_source_and_flags(module_dir, unified_file,
++                                                       self._topobjdir, obj.relobjdir, flags=mystery_include)
 +            else:
 +                for f in obj.files:
-+                    self.add_per_dir_source_and_flags(module_dir, f, self._topsrcdir, obj.relobjdir)
++                    self._add_per_dir_source_and_flags(module_dir, f, self._topsrcdir, obj.relobjdir)
 +
 +        elif isinstance(obj, LocalInclude) or isinstance(obj, GeneratedInclude):
 +            topdir = obj.topsrcdir if isinstance(obj, LocalInclude) else obj.topobjdir
@@ -234,15 +205,13 @@ new file mode 100644
 +                path = os.path.join(topdir, module_dir, obj.path)
 +
 +            if os.path.exists(path):
-+                self.add_per_relobjdir_build_args(obj.relobjdir, {'-I' + path})
++                self._add_per_relobjdir_build_args(obj.relobjdir, {'-I' + path})
 +
 +    def consume_finished(self):
 +        self._flush_to_xcode()
 +
-+        # For reasons unknown, various includes are missing.
-+        # Adding a few of them manually.
++        # For reasons unknown, various includes are missing. Adding them manually.
 +        import glob
-+
 +        missing_topsrc_includes = glob.glob(os.path.join(self._topsrcdir, 'security/nss/lib') + "/*")
 +        # sqlite conflicts, remove it
 +        missing_topsrc_includes = [x for x in missing_topsrc_includes if 'sqlite' not in x]
@@ -264,8 +233,40 @@ new file mode 100644
 +
 +        print 'Xcode file is at: ' + self._xcode_project.pbxproj_path
 +
++    def _add_per_dir_source_and_flags(self, directory, file, abs_src_path, relobjdir, is_built=True, flags=''):
++        # some files can arrive as a full path to file
++        if abs_src_path in file:
++            file = file.replace(abs_src_path + '/', '').replace(directory + '/', '')
++
++        if directory not in self._per_dir_sources_and_flags:
++            self._per_dir_sources_and_flags[directory] = {}
++        if file not in self._per_dir_sources_and_flags[directory]:
++            self._per_dir_sources_and_flags[directory][file] = {'abs_src_path': abs_src_path, 'is_built': is_built,
++                                                                'flags': flags, 'relobjdir': relobjdir}
++
++        if flags:
++            self._per_dir_sources_and_flags[directory][file]['flags'] += ' ' + flags
++
++        # look for a matching header file
++        if file[-2:] == '.h':
++            return
++
++        header_file = file.rsplit(".", 1)[0] + ".h"
++        for src_path in (self._topsrcdir, self._topobjdir):
++            if os.path.exists(os.path.join(src_path, directory + '/' + header_file)):
++                self._add_per_dir_source_and_flags(directory, header_file, src_path, relobjdir)
++                break
++
++    def _add_per_relobjdir_build_args(self, directory, set_of_build_args):
++        if directory not in self._per_dir_defines_includes_and_flags:
++            self._per_dir_defines_includes_and_flags[directory] = list(set_of_build_args)
++        else:
++            existing = self._per_dir_defines_includes_and_flags[directory]
++            args = [x for x in set_of_build_args if x not in existing]
++            self._per_dir_defines_includes_and_flags[directory].extend(args)
++
 +    def _get_or_create_xcode_group(self, abs_src_path, sub_path, depth=0):
-+        if not sub_path or sub_path.__len__() < 2:
++        if not sub_path or len(sub_path) < 2:
 +            return None
 +
 +        path = os.path.join(abs_src_path, sub_path)
@@ -293,7 +294,7 @@ new file mode 100644
 +    def _add_file_to_xcode_group(self, group, full_path_to_file, is_built, flags):
 +        result = self._xcode_project.add_file(full_path_to_file, group,
 +                                              create_build_files=is_built, ignore_unknown_type=True)
-+        if result.__len__() == 0:
++        if len(result) == 0:
 +            return
 +
 +        for item in result:
