@@ -2902,7 +2902,7 @@ diff --git a/python/mozbuild/mozbuild/backend/templates/xcode/stub_project.pbxpr
 new file mode 100644
 --- /dev/null
 +++ b/python/mozbuild/mozbuild/backend/templates/xcode/stub_project.pbxproj
-@@ -0,0 +1,169 @@
+@@ -0,0 +1,166 @@
 +// !$*UTF8*$!
 +{
 +	archiveVersion = 1;
@@ -2911,25 +2911,13 @@ new file mode 100644
 +	objectVersion = 46;
 +	objects = {
 +
-+/* Begin PBXCopyFilesBuildPhase section */
-+		EB1183CC1A75F4ED0094CA96 /* CopyFiles */ = {
-+			isa = PBXCopyFilesBuildPhase;
-+			buildActionMask = 2147483647;
-+			dstPath = /usr/share/man/man1/;
-+			dstSubfolderSpec = 0;
-+			files = (
-+			);
-+			runOnlyForDeploymentPostprocessing = 1;
-+		};
-+/* End PBXCopyFilesBuildPhase section */
-+
 +/* Begin PBXFileReference section */
-+		EB1183CE1A75F4ED0094CA96 /* firefox */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = firefox; sourceTree = BUILT_PRODUCTS_DIR; };
 +		EB1183D81A75F5080094CA96 /* config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = config.xcconfig; sourceTree = "<group>"; };
++		EBA5BE9D1AE2146A00BEE021 /* libfirefox.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libfirefox.a; sourceTree = BUILT_PRODUCTS_DIR; };
 +/* End PBXFileReference section */
 +
 +/* Begin PBXFrameworksBuildPhase section */
-+		EB1183CB1A75F4ED0094CA96 /* Frameworks */ = {
++		EBA5BE9A1AE2146A00BEE021 /* Frameworks */ = {
 +			isa = PBXFrameworksBuildPhase;
 +			buildActionMask = 2147483647;
 +			files = (
@@ -2950,21 +2938,31 @@ new file mode 100644
 +		EB1183CF1A75F4ED0094CA96 /* Products */ = {
 +			isa = PBXGroup;
 +			children = (
-+				EB1183CE1A75F4ED0094CA96 /* firefox */,
++				EBA5BE9D1AE2146A00BEE021 /* libfirefox.a */,
 +			);
 +			name = Products;
 +			sourceTree = "<group>";
 +		};
 +/* End PBXGroup section */
 +
++/* Begin PBXHeadersBuildPhase section */
++		EBA5BE9B1AE2146A00BEE021 /* Headers */ = {
++			isa = PBXHeadersBuildPhase;
++			buildActionMask = 2147483647;
++			files = (
++			);
++			runOnlyForDeploymentPostprocessing = 0;
++		};
++/* End PBXHeadersBuildPhase section */
++
 +/* Begin PBXNativeTarget section */
-+		EB1183CD1A75F4ED0094CA96 /* firefox */ = {
++		EBA5BE9C1AE2146A00BEE021 /* firefox */ = {
 +			isa = PBXNativeTarget;
-+			buildConfigurationList = EB1183D51A75F4ED0094CA96 /* Build configuration list for PBXNativeTarget "firefox" */;
++			buildConfigurationList = EBA5BE9E1AE2146A00BEE021 /* Build configuration list for PBXNativeTarget "firefox" */;
 +			buildPhases = (
-+				EB1183CA1A75F4ED0094CA96 /* Sources */,
-+				EB1183CB1A75F4ED0094CA96 /* Frameworks */,
-+				EB1183CC1A75F4ED0094CA96 /* CopyFiles */,
++				EBA5BE991AE2146A00BEE021 /* Sources */,
++				EBA5BE9A1AE2146A00BEE021 /* Frameworks */,
++				EBA5BE9B1AE2146A00BEE021 /* Headers */,
 +			);
 +			buildRules = (
 +			);
@@ -2972,8 +2970,8 @@ new file mode 100644
 +			);
 +			name = firefox;
 +			productName = firefox;
-+			productReference = EB1183CE1A75F4ED0094CA96 /* firefox */;
-+			productType = "com.apple.product-type.tool";
++			productReference = EBA5BE9D1AE2146A00BEE021 /* libfirefox.a */;
++			productType = "com.apple.product-type.library.static";
 +		};
 +/* End PBXNativeTarget section */
 +
@@ -2984,8 +2982,8 @@ new file mode 100644
 +				LastUpgradeCheck = 0610;
 +				ORGANIZATIONNAME = "Garvan Keeley";
 +				TargetAttributes = {
-+					EB1183CD1A75F4ED0094CA96 = {
-+						CreatedOnToolsVersion = 6.1.1;
++					EBA5BE9C1AE2146A00BEE021 = {
++						CreatedOnToolsVersion = 6.3;
 +					};
 +				};
 +			};
@@ -3001,13 +2999,13 @@ new file mode 100644
 +			projectDirPath = "";
 +			projectRoot = "";
 +			targets = (
-+				EB1183CD1A75F4ED0094CA96 /* firefox */,
++				EBA5BE9C1AE2146A00BEE021 /* firefox */,
 +			);
 +		};
 +/* End PBXProject section */
 +
 +/* Begin PBXSourcesBuildPhase section */
-+		EB1183CA1A75F4ED0094CA96 /* Sources */ = {
++		EBA5BE991AE2146A00BEE021 /* Sources */ = {
 +			isa = PBXSourcesBuildPhase;
 +			buildActionMask = 2147483647;
 +			files = (
@@ -3021,7 +3019,6 @@ new file mode 100644
 +			isa = XCBuildConfiguration;
 +			baseConfigurationReference = EB1183D81A75F5080094CA96 /* config.xcconfig */;
 +			buildSettings = {
-+				
 +			};
 +			name = Debug;
 +		};
@@ -3029,20 +3026,21 @@ new file mode 100644
 +			isa = XCBuildConfiguration;
 +			baseConfigurationReference = EB1183D81A75F5080094CA96 /* config.xcconfig */;
 +			buildSettings = {
-+				
 +			};
 +			name = Release;
 +		};
-+		EB1183D61A75F4ED0094CA96 /* Debug */ = {
++		EBA5BE9F1AE2146A00BEE021 /* Debug */ = {
 +			isa = XCBuildConfiguration;
 +			buildSettings = {
++				EXECUTABLE_PREFIX = lib;
 +				PRODUCT_NAME = "$(TARGET_NAME)";
 +			};
 +			name = Debug;
 +		};
-+		EB1183D71A75F4ED0094CA96 /* Release */ = {
++		EBA5BEA01AE2146A00BEE021 /* Release */ = {
 +			isa = XCBuildConfiguration;
 +			buildSettings = {
++				EXECUTABLE_PREFIX = lib;
 +				PRODUCT_NAME = "$(TARGET_NAME)";
 +			};
 +			name = Release;
@@ -3059,14 +3057,13 @@ new file mode 100644
 +			defaultConfigurationIsVisible = 0;
 +			defaultConfigurationName = Release;
 +		};
-+		EB1183D51A75F4ED0094CA96 /* Build configuration list for PBXNativeTarget "firefox" */ = {
++		EBA5BE9E1AE2146A00BEE021 /* Build configuration list for PBXNativeTarget "firefox" */ = {
 +			isa = XCConfigurationList;
 +			buildConfigurations = (
-+				EB1183D61A75F4ED0094CA96 /* Debug */,
-+				EB1183D71A75F4ED0094CA96 /* Release */,
++				EBA5BE9F1AE2146A00BEE021 /* Debug */,
++				EBA5BEA01AE2146A00BEE021 /* Release */,
 +			);
 +			defaultConfigurationIsVisible = 0;
-+			defaultConfigurationName = Release;
 +		};
 +/* End XCConfigurationList section */
 +	};
