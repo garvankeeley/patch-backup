@@ -1,6 +1,6 @@
 # HG changeset patch
 # User Garvan Keeley <gkeeley@mozilla.com>
-# Parent  e03da74b63ae15e8c20c8afc1998b19d752675f7
+# Parent  7f343964210b9d8ebaeff095752d039025e42e12
 Bug 1155237 - Part 1, remove contextless access to NetworkUtils, causes NPE. r=rnewman
 
 diff --git a/mobile/android/stumbler/java/org/mozilla/mozstumbler/service/stumblerthread/StumblerService.java b/mobile/android/stumbler/java/org/mozilla/mozstumbler/service/stumblerthread/StumblerService.java
@@ -45,50 +45,56 @@ diff --git a/mobile/android/stumbler/java/org/mozilla/mozstumbler/service/stumbl
 diff --git a/mobile/android/stumbler/java/org/mozilla/mozstumbler/service/uploadthread/AsyncUploader.java b/mobile/android/stumbler/java/org/mozilla/mozstumbler/service/uploadthread/AsyncUploader.java
 --- a/mobile/android/stumbler/java/org/mozilla/mozstumbler/service/uploadthread/AsyncUploader.java
 +++ b/mobile/android/stumbler/java/org/mozilla/mozstumbler/service/uploadthread/AsyncUploader.java
-@@ -9,17 +9,16 @@ import android.util.Log;
- import java.io.IOException;
- import java.util.concurrent.atomic.AtomicBoolean;
- 
- import org.mozilla.mozstumbler.service.Prefs;
- import org.mozilla.mozstumbler.service.utils.AbstractCommunicator;
- import org.mozilla.mozstumbler.service.utils.AbstractCommunicator.SyncSummary;
- import org.mozilla.mozstumbler.service.AppGlobals;
- import org.mozilla.mozstumbler.service.stumblerthread.datahandling.DataStorageManager;
--import org.mozilla.mozstumbler.service.utils.NetworkUtils;
- 
- /* Only one at a time may be uploading. If executed while another upload is in progress
+@@ -20,39 +20,43 @@ import org.mozilla.mozstumbler.service.u
  * it will return immediately, and SyncResult is null.
  *
  * Threading:
  * Uploads on a separate thread. ONLY DataStorageManager is thread-safe, do not call
  * preferences, do not call any code that isn't thread-safe. You will cause suffering.
  * An exception is made for AppGlobals.isDebug, a false reading is of no consequence. */
-@@ -33,19 +32,23 @@ public class AsyncUploader extends Async
+ public class AsyncUploader extends AsyncTask<Void, Void, SyncSummary> {
+     private static final String LOG_TAG = AppGlobals.makeLogTag(AsyncUploader.class.getSimpleName());
+-    private final UploadSettings mSettings;
++    private final AsyncUploadArgs mUploadArgs;
+     private final Object mListenerLock = new Object();
+     private AsyncUploaderListener mListener;
+     private static final AtomicBoolean sIsUploading = new AtomicBoolean();
+     private String mNickname;
  
      public interface AsyncUploaderListener {
          public void onUploadComplete(SyncSummary result);
          public void onUploadProgress();
      }
  
-     public static class UploadSettings {
+-    public static class UploadSettings {
++    public static class AsyncUploadArgs {
++        public final NetworkUtils mNetworkUtils;
          public final boolean mShouldIgnoreWifiStatus;
-+        public final boolean mIsWifiAvailable;
          public final boolean mUseWifiOnly;
 -        public UploadSettings(boolean shouldIgnoreWifiStatus, boolean useWifiOnly) {
-+        public UploadSettings(boolean shouldIgnoreWifiStatus, 
-+                              boolean isWifiAvailable,
-+                              boolean useWifiOnly) {
++        public AsyncUploadArgs(NetworkUtils networkUtils,
++                               boolean shouldIgnoreWifiStatus,
++                               boolean useWifiOnly) {
++            mNetworkUtils = networkUtils;
              mShouldIgnoreWifiStatus = shouldIgnoreWifiStatus;
-+            mIsWifiAvailable = isWifiAvailable;
              mUseWifiOnly = useWifiOnly;
          }
      }
  
-     public AsyncUploader(UploadSettings settings, AsyncUploaderListener listener) {
+-    public AsyncUploader(UploadSettings settings, AsyncUploaderListener listener) {
++    public AsyncUploader(AsyncUploadArgs args, AsyncUploaderListener listener) {
          mListener = listener;
-         mSettings = settings;
+-        mSettings = settings;
++        mUploadArgs = args;
      }
-@@ -141,17 +144,17 @@ public class AsyncUploader extends Async
+ 
+     public void setNickname(String name) {
+         mNickname = name;
+     }
+ 
+     public void clearListener() {
+         synchronized (mListenerLock) {
+@@ -141,17 +145,18 @@ public class AsyncUploader extends Async
          }
      }
  
@@ -98,7 +104,8 @@ diff --git a/mobile/android/stumbler/java/org/mozilla/mozstumbler/service/upload
          long uploadedWifis = 0;
  
 -        if (!mSettings.mShouldIgnoreWifiStatus && mSettings.mUseWifiOnly && !NetworkUtils.getInstance().isWifiAvailable()) {
-+        if (!mSettings.mShouldIgnoreWifiStatus && mSettings.mUseWifiOnly && mSettings.mIsWifiAvailable) {
++        if (!mUploadArgs.mShouldIgnoreWifiStatus && mUploadArgs.mUseWifiOnly &&
++               mUploadArgs.mNetworkUtils.isWifiAvailable()) {
              if (AppGlobals.isDebug) {
                  Log.d(LOG_TAG, "not on WiFi, not sending");
              }
@@ -120,15 +127,16 @@ diff --git a/mobile/android/stumbler/java/org/mozilla/mozstumbler/service/upload
              }
  
 -            if (NetworkUtils.getInstance().isWifiAvailable() &&
-+            NetworkUtils network = new NetworkUtils(this);
-+            if (network.isWifiAvailable() &&
++            NetworkUtils networkUtils = new NetworkUtils(this);
++            if (networkUtils.isWifiAvailable() &&
                  !AsyncUploader.isUploading()) {
                  Log.d(LOG_TAG, "Alarm upload(), call AsyncUploader");
-                 AsyncUploader.UploadSettings settings =
+-                AsyncUploader.UploadSettings settings =
 -                    new AsyncUploader.UploadSettings(Prefs.getInstance(this).getWifiScanAlways(), Prefs.getInstance(this).getUseWifiOnly());
-+                    new AsyncUploader.UploadSettings(Prefs.getInstance(this).getWifiScanAlways(), 
-+                                                     true,
-+                                                     Prefs.getInstance(this).getUseWifiOnly());
++                AsyncUploader.AsyncUploadArgs settings =
++                    new AsyncUploader.AsyncUploadArgs(networkUtils,
++                            Prefs.getInstance(this).getWifiScanAlways(),
++                            Prefs.getInstance(this).getUseWifiOnly());
                  AsyncUploader uploader = new AsyncUploader(settings, null);
                  uploader.setNickname(Prefs.getInstance(this).getNickname());
                  uploader.execute();
