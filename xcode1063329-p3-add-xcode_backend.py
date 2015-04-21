@@ -1,40 +1,13 @@
 # HG changeset patch
 # User Garvan Keeley <gkeeley@mozilla.com>
-# Parent  97e949f535e129d2a1a933e1f8ad603fa5775a1f
+# Parent  930932c7eedd26ad880bd8d904a07422bb07a339
 Bug 1063329 - Part 3, add xcode_packend.py, the project generator
 
-diff --git a/media/libstagefright/ports/win32/include/unistd.h b/media/libstagefright/ports/win32/include/unistd.h
-deleted file mode 100644
---- a/media/libstagefright/ports/win32/include/unistd.h
-+++ /dev/null
-@@ -1,1 +0,0 @@
--// Intentionally left blank
-diff --git a/media/webrtc/signaling/src/peerconnection/WebrtcGlobalInformation.cpp b/media/webrtc/signaling/src/peerconnection/WebrtcGlobalInformation.cpp
---- a/media/webrtc/signaling/src/peerconnection/WebrtcGlobalInformation.cpp
-+++ b/media/webrtc/signaling/src/peerconnection/WebrtcGlobalInformation.cpp
-@@ -25,17 +25,16 @@
- #include "PeerConnectionImpl.h"
- #include "webrtc/system_wrappers/interface/trace.h"
- 
- static const char* logTag = "WebrtcGlobalInformation";
- 
- namespace mozilla {
- 
- namespace dom {
--
- typedef Vector<nsAutoPtr<RTCStatsQuery>> RTCStatsQueries;
- 
- static PeerConnectionCtx* GetPeerConnectionCtx()
- {
-   if(PeerConnectionCtx::isActive()) {
-     MOZ_ASSERT(PeerConnectionCtx::GetInstance());
-     return PeerConnectionCtx::GetInstance();
-   }
 diff --git a/python/mozbuild/mozbuild/backend/xcode_backend.py b/python/mozbuild/mozbuild/backend/xcode_backend.py
 new file mode 100644
 --- /dev/null
 +++ b/python/mozbuild/mozbuild/backend/xcode_backend.py
-@@ -0,0 +1,282 @@
+@@ -0,0 +1,284 @@
 +# This Source Code Form is subject to the terms of the Mozilla Public
 +# License, v. 2.0. If a copy of the MPL was not distributed with this
 +# file, You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -159,7 +132,8 @@ new file mode 100644
 +                else:
 +                    added_flags.add(defines_to_string(key, value))
 +
-+            added_flags = {x for x in added_flags if not re.match(r'\S+\.js|\S+\.manifest|\S+\.py|\S+\.cpp', x)}
++            pattern = re.compile(r'\S+\.js|\S+\.manifest|\S+\.py|\S+\.cpp', re.IGNORECASE)
++            added_flags = {x for x in added_flags if not re.match(pattern, x)}
 +            if '-std=c99' in added_flags:
 +                added_flags.remove('-std=c99')
 +            self._add_per_relobjdir_build_args(obj.relobjdir, added_flags)
@@ -247,10 +221,10 @@ new file mode 100644
 +        if flags:
 +            self._per_dir_sources_and_flags[directory][file]['flags'] += ' ' + flags
 +
-+        # look for a matching header file
-+        if file[-2:] == '.h':
++        if file.endswith('.h'):
 +            return
 +
++        # look for a matching header file
 +        header_file = file.rsplit(".", 1)[0] + ".h"
 +        for src_path in (self._topsrcdir, self._topobjdir):
 +            if os.path.exists(os.path.join(src_path, directory + '/' + header_file)):
@@ -313,7 +287,8 @@ new file mode 100644
 +                    compiler_flags += ' -I{0}/intl/icu/source/common -I{0}/intl/icu/source/i18n'.format(self._topsrcdir) + \
 +                                      ' -I' + os.path.join(self._topobjdir, 'dist/include')
 +
-+                # xcode treats double spaces as terminators when parsing flags
++                # It seemed xcode treats double spaces between flags as terminators, so  remove those,
++                # and cleanup any includes with trailing slashes, for aesthetics.
 +                compiler_flags = compiler_flags.replace('  -', ' -').replace('/ -', ' -')
 +                full_path = os.path.join(flags['abs_src_path'], module + '/' + f)
 +                self._add_file_to_xcode_group(group, full_path, flags['is_built'], compiler_flags)
