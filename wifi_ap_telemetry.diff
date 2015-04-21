@@ -1,0 +1,53 @@
+# HG changeset patch
+# User Garvan Keeley <gkeeley@mozilla.com>
+# Parent  52f018bbe592f43e7dac82641edb6dbf0d2045ba
+Bug xxx. Add telemetry probe for wifi AP scan count. r=cpeterson
+
+diff --git a/dom/system/NetworkGeolocationProvider.js b/dom/system/NetworkGeolocationProvider.js
+--- a/dom/system/NetworkGeolocationProvider.js
++++ b/dom/system/NetworkGeolocationProvider.js
+@@ -393,16 +393,17 @@ WifiGeoPositionProvider.prototype = {
+ 
+     function encode(ap) {
+       return { 'macAddress': ap.mac, 'signalStrength': ap.signal };
+     };
+ 
+     let wifiData = null;
+     if (accessPoints) {
+       wifiData = accessPoints.filter(isPublic).sort(sort).map(encode);
++      Services.telemetry.getHistogramById("GEOLOCATION_WIFI_APS_VISIBLE").add(wifiData.length);
+     }
+     this.sendLocationRequest(wifiData);
+   },
+ 
+   onError: function (code) {
+     LOG("wifi error: " + code);
+     this.sendLocationRequest(null);
+   },
+diff --git a/toolkit/components/telemetry/Histograms.json b/toolkit/components/telemetry/Histograms.json
+--- a/toolkit/components/telemetry/Histograms.json
++++ b/toolkit/components/telemetry/Histograms.json
+@@ -338,16 +338,23 @@
+     "n_buckets": 50,
+     "description": "Location accuracy"
+   },
+   "GEOLOCATION_ERROR": {
+     "expires_in_version": "40",
+     "kind": "flag",
+     "description": "Has seen location error"
+   },
++  "GEOLOCATION_WIFI_APS_VISIBLE": {
++    "expires_in_version": "45",
++    "kind": "linear",
++    "high": "20",
++    "n_buckets": 10,
++    "description": "Count of Wi-Fi APs scanned for a geolocation lookup"
++  },
+   "GEOLOCATION_WIN8_SOURCE_IS_MLS": {
+     "expires_in_version": "default",
+     "kind": "boolean",
+     "description": "Geolocation on Win8 is either MLS or native"
+   },
+   "GEOLOCATION_OSX_SOURCE_IS_MLS": {
+     "expires_in_version": "default",
+     "kind": "boolean",
