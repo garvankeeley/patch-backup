@@ -1,12 +1,12 @@
 # HG changeset patch
 # User Garvan Keeley <gkeeley@mozilla.com>
-# Parent  1b4f37c343af8c67825b057579abf510cbbd2f6c
+# Parent  c9b84a6fb52fbdea2dddc0f2ee5f2bc39d30fdde
 Bug 1145111 - make geo position cache static, thus useable over longer time period. r=jdm
 
 diff --git a/dom/geolocation/nsGeolocation.cpp b/dom/geolocation/nsGeolocation.cpp
 --- a/dom/geolocation/nsGeolocation.cpp
 +++ b/dom/geolocation/nsGeolocation.cpp
-@@ -60,16 +60,18 @@ class nsIPrincipal;
+@@ -62,16 +62,18 @@ class nsIPrincipal;
  
  // the geolocation enabled setting
  #define GEO_SETTINGS_ENABLED          "geolocation.enabled"
@@ -25,7 +25,7 @@ diff --git a/dom/geolocation/nsGeolocation.cpp b/dom/geolocation/nsGeolocation.c
   public:
    NS_DECL_CYCLE_COLLECTING_ISUPPORTS
    NS_DECL_NSICONTENTPERMISSIONREQUEST
-@@ -461,37 +463,38 @@ nsGeolocationRequest::Allow(JS::HandleVa
+@@ -471,37 +473,37 @@ nsGeolocationRequest::Allow(JS::HandleVa
  
    if (NS_FAILED(rv)) {
      // Location provider error
@@ -36,8 +36,7 @@ diff --git a/dom/geolocation/nsGeolocation.cpp b/dom/geolocation/nsGeolocation.c
    bool canUseCache = false;
 -  CachedPositionAndAccuracy lastPosition = gs->GetCachedPosition();
 -  if (lastPosition.position) {
-+  CachedPositionAndAccuracy* lastPosition;
-+  gs->GetCachedPosition(&lastPosition);
++  nsRefPtr<CachedPositionAndAccuracy> lastPosition = gs->GetCachedPosition();
 +  if (lastPosition->position) {
      DOMTimeStamp cachedPositionTime_ms;
 -    lastPosition.position->GetTimestamp(&cachedPositionTime_ms);
@@ -69,7 +68,7 @@ diff --git a/dom/geolocation/nsGeolocation.cpp b/dom/geolocation/nsGeolocation.c
      mLocator->NotifyAllowedRequest(this);
    }
  
-@@ -873,17 +876,16 @@ nsGeolocationService::HandleMozsettingCh
+@@ -893,17 +895,16 @@ nsGeolocationService::HandleMozsettingCh
  
  void
  nsGeolocationService::HandleMozsettingValue(const bool aValue)
@@ -87,7 +86,7 @@ diff --git a/dom/geolocation/nsGeolocation.cpp b/dom/geolocation/nsGeolocation.c
      if (sGeoInitPending) {
        sGeoInitPending = false;
        for (uint32_t i = 0, length = mGeolocators.Length(); i < length; ++i) {
-@@ -963,24 +965,30 @@ nsGeolocationService::NotifyError(uint16
+@@ -983,24 +984,29 @@ nsGeolocationService::NotifyError(uint16
    }
  
    return NS_OK;
@@ -98,23 +97,21 @@ diff --git a/dom/geolocation/nsGeolocation.cpp b/dom/geolocation/nsGeolocation.c
  {
 -  mLastPosition.position = aPosition;
 -  mLastPosition.isHighAccuracy = mHigherAccuracy;
-+  CachedPositionAndAccuracy* cache;
-+  GetCachedPosition(&cache);
++  nsRefPtr<CachedPositionAndAccuracy> cache = GetCachedPosition();
 +  cache->position = aPosition;
 +  cache->isHighAccuracy = mHigherAccuracy;
  }
  
 -CachedPositionAndAccuracy
--nsGeolocationService::GetCachedPosition()
-+void
-+nsGeolocationService::GetCachedPosition(CachedPositionAndAccuracy** outCache)
++already_AddRefed<CachedPositionAndAccuracy>
+ nsGeolocationService::GetCachedPosition()
  {
 -  return mLastPosition;
 +  if (!sLastPosition) {
 +    sLastPosition = new CachedPositionAndAccuracy();
 +    ClearOnShutdown(&sLastPosition);
 +  }
-+  *outCache = sLastPosition.get();
++  return nsRefPtr<CachedPositionAndAccuracy>(sLastPosition.get()).forget();
  }
  
  nsresult
@@ -126,7 +123,7 @@ diff --git a/dom/geolocation/nsGeolocation.cpp b/dom/geolocation/nsGeolocation.c
 diff --git a/dom/geolocation/nsGeolocation.h b/dom/geolocation/nsGeolocation.h
 --- a/dom/geolocation/nsGeolocation.h
 +++ b/dom/geolocation/nsGeolocation.h
-@@ -23,34 +23,37 @@
+@@ -25,34 +25,40 @@
  #include "nsIDOMGeoGeolocation.h"
  #include "nsIDOMGeoPosition.h"
  #include "nsIDOMGeoPositionError.h"
@@ -154,10 +151,13 @@ diff --git a/dom/geolocation/nsGeolocation.h b/dom/geolocation/nsGeolocation.h
  }
  
 -struct CachedPositionAndAccuracy {
-+class CachedPositionAndAccuracy : public mozilla::RefCounted<CachedPositionAndAccuracy>
++class CachedPositionAndAccuracy
 +{
++private:
++  ~CachedPositionAndAccuracy() {}
 +public:
 +  MOZ_DECLARE_REFCOUNTED_TYPENAME(CachedPositionAndAccuracy)
++  NS_INLINE_DECL_REFCOUNTING(CachedPositionAndAccuracy)
    nsCOMPtr<nsIDOMGeoPosition> position;
    bool isHighAccuracy;
  };
@@ -166,7 +166,7 @@ diff --git a/dom/geolocation/nsGeolocation.h b/dom/geolocation/nsGeolocation.h
   * Singleton that manages the geolocation provider
   */
  class nsGeolocationService final : public nsIGeolocationUpdate,
-@@ -74,17 +77,17 @@ public:
+@@ -76,17 +82,17 @@ public:
    void HandleMozsettingChanged(nsISupports* aSubject);
    void HandleMozsettingValue(const bool aValue);
  
@@ -176,7 +176,7 @@ diff --git a/dom/geolocation/nsGeolocation.h b/dom/geolocation/nsGeolocation.h
  
    void SetCachedPosition(nsIDOMGeoPosition* aPosition);
 -  CachedPositionAndAccuracy GetCachedPosition();
-+  void GetCachedPosition(CachedPositionAndAccuracy** outCache);
++  already_AddRefed<CachedPositionAndAccuracy> GetCachedPosition();
  
    // Find and startup a geolocation device (gps, nmea, etc.)
    nsresult StartDevice(nsIPrincipal* aPrincipal);
@@ -185,7 +185,7 @@ diff --git a/dom/geolocation/nsGeolocation.h b/dom/geolocation/nsGeolocation.h
    void     StopDevice();
  
    // create, or reinitalize the callback timer
-@@ -107,17 +110,17 @@ private:
+@@ -109,17 +115,17 @@ private:
    nsCOMPtr<nsIGeolocationProvider> mProvider;
  
    // mGeolocators are not owned here.  Their constructor

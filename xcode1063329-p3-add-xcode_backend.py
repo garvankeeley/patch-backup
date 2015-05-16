@@ -7,7 +7,7 @@ diff --git a/python/mozbuild/mozbuild/backend/xcode_backend.py b/python/mozbuild
 new file mode 100644
 --- /dev/null
 +++ b/python/mozbuild/mozbuild/backend/xcode_backend.py
-@@ -0,0 +1,284 @@
+@@ -0,0 +1,304 @@
 +# This Source Code Form is subject to the terms of the Mozilla Public
 +# License, v. 2.0. If a copy of the MPL was not distributed with this
 +# file, You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -30,13 +30,16 @@ new file mode 100644
 +    def _init(self):
 +        self._per_dir_defines_includes_and_flags = {}
 +        self._per_dir_sources_and_flags = {}
-+        self._topobjdir = None
-+        self._topsrcdir = None
++        self._topobjdir = self.environment.topobjdir
++        self._topsrcdir = self.environment.topsrcdir
++        self._moz_app_version = None
 +        self._xcode_groups = {}
 +
 +        CommonBackend._init(self)
 +
-+        xcode_proj_path = os.path.join(self.environment.topobjdir, 'firefox.xcodeproj/project.pbxproj')
++        self._get_all_headers(self._topsrcdir)
++
++        xcode_proj_path = os.path.join(self._topobjdir, 'firefox.xcodeproj/project.pbxproj')
 +        try:
 +            os.mkdir(os.path.dirname(xcode_proj_path))
 +        except OSError:
@@ -46,6 +49,16 @@ new file mode 100644
 +
 +        shutil.copy(os.path.join(self._current_path, 'templates/xcode/stub_project.pbxproj'),
 +                    xcode_proj_path)
++
++        xcshared_file = os.path.dirname(xcode_proj_path) + "/xcshareddata/xcschemes/firefox.xcscheme"
++        if not os.path.exists(os.path.dirname(xcshared_file)):
++            os.makedirs(os.path.dirname(xcshared_file))
++        shutil.copy(os.path.join(self._current_path, 'templates/xcode/stub_firefox.xcscheme'),
++                    xcshared_file)
++        with open(xcshared_file) as in_file:
++            text = in_file.read()
++        with open(xcshared_file, 'w') as out_file:
++            out_file.write(text.replace('REPLACE_ME_WITH_PATH', self._topobjdir))
 +
 +        self._xcode_project = XcodeProject.Load(xcode_proj_path)
 +
@@ -69,16 +82,11 @@ new file mode 100644
 +        if not module_dir:
 +            return
 +
-+        if not self._topsrcdir:
-+            self._topsrcdir = obj.topsrcdir
-+        if not self._topobjdir:
-+            self._topobjdir = obj.topobjdir
++        if not self._moz_app_version:
++            self._moz_app_version = 'MOZ_APP_VERSION=\\"' + obj.config.substs["MOZ_APP_VERSION"] + '\\"'
 +
 +        if isinstance(obj, DirectoryTraversal):
-+            self._add_per_relobjdir_build_args(obj.relobjdir,
-+                                        {'-I' + obj.srcdir,
-+                                         '-DDEBUG',
-+                                         '-DMOZ_APP_VERSION=\\"' + obj.config.substs["MOZ_APP_VERSION"] + '\\"'})
++            self._add_per_relobjdir_build_args(obj.relobjdir, {'-I' + obj.srcdir})
 +
 +            objinc = self._topobjdir + "/" + module_dir
 +            if os.path.exists(objinc):
@@ -100,7 +108,9 @@ new file mode 100644
 +
 +            # todo: mystery as to why this is missing
 +            if 'gfx' in module_dir:
-+                self._add_per_relobjdir_build_args(obj.relobjdir, {'-I' + os.path.join(self._topobjdir, 'dist/include/cairo')})
++                self._add_per_relobjdir_build_args(obj.relobjdir,
++                                                   {'-I' + './dist/include/cairo' +
++                                                    ' -I' + './gfx/cairo/cairo/src'})
 +
 +        if isinstance(obj, Exports):
 +            for path, files in obj.exports.walk():
@@ -196,11 +206,12 @@ new file mode 100644
 +        output_xcconfig = os.path.join(self._topobjdir, 'config.xcconfig')
 +        shutil.copyfile(os.path.join(self._current_path, 'templates/xcode/stub_xcconfig'), output_xcconfig)
 +        f = open(output_xcconfig, 'a')
-+        f.write("\nGCC_PREPROCESSOR_DEFINITIONS = NO_NSPR_10_SUPPORT=1 N_UNDF=0x0")
++        f.write("\nGCC_PREPROCESSOR_DEFINITIONS = DEBUG NO_NSPR_10_SUPPORT=1 N_UNDF=0x0 " + self._moz_app_version)
 +        f.write("\nHEADER_SEARCH_PATHS = " +
 +                ' '.join([os.path.join(self._topsrcdir, x) for x in missing_topsrc_includes]) + ' ' +
-+                os.path.join(self._topobjdir, 'dist/include/nss') + ' ' +
-+                os.path.join(self._topobjdir, 'dist/include/nspr'))
++                './dist/include/nss . ./dist/nspr-include ./xpcom ./netwerk '
++                './js/src ./layout/style ./toolkit/components/telemetry '
++                './accessible/xpcom ./gfx/cairo/cairo/src ')
 +        f.close()
 +
 +        self._xcode_project.save(sort=True)
@@ -292,4 +303,13 @@ new file mode 100644
 +                compiler_flags = compiler_flags.replace('  -', ' -').replace('/ -', ' -')
 +                full_path = os.path.join(flags['abs_src_path'], module + '/' + f)
 +                self._add_file_to_xcode_group(group, full_path, flags['is_built'], compiler_flags)
++
++    def _get_all_headers(self, directory):
++        for root, dirs, files in os.walk(directory):
++            dirs[:] = [d for d in dirs if not d.startswith('.')]
++            for file in files:
++                if file.endswith('.h'):
++                    module = root.replace(directory + '/', '')
++                    self._add_per_dir_source_and_flags(module, file,
++                                                       directory, None, is_built=False)
 \ No newline at end of file

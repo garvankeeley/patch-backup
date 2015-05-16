@@ -1,38 +1,25 @@
 # HG changeset patch
 # User Garvan Keeley <gkeeley@mozilla.com>
-# Parent  7f343964210b9d8ebaeff095752d039025e42e12
+# Parent  d2e193cface2c253d3a510e9543b8384ace3e1a6
 Bug 1063329 - Part 1 - add 'xcode' as backend option
 
 diff --git a/python/mozbuild/mozbuild/backend/mach_commands.py b/python/mozbuild/mozbuild/backend/mach_commands.py
 --- a/python/mozbuild/mozbuild/backend/mach_commands.py
 +++ b/python/mozbuild/mozbuild/backend/mach_commands.py
-@@ -8,16 +8,17 @@ import argparse
- import glob
- import logging
- import os
- import sys
- import subprocess
- import which
- 
- from mozbuild.backend.cpp_eclipse import CppEclipseBackend
-+from mozbuild.backend.xcode_backend import XcodeBackend
- 
- from mozbuild.base import (
-     MachCommandBase,
- )
- 
- from mach.decorators import (
-     CommandArgument,
+@@ -23,19 +23,21 @@ from mach.decorators import (
      CommandProvider,
-@@ -26,16 +27,18 @@ from mach.decorators import (
+     Command,
+ )
  
  @CommandProvider
  class MachCommands(MachCommandBase):
      @Command('ide', category='devenv',
          description='Generate a project and launch an IDE.')
-     @CommandArgument('ide', choices=['eclipse', 'visualstudio', 'androidstudio', 'intellij'])
+-    @CommandArgument('ide', choices=['eclipse', 'visualstudio', 'androidstudio', 'intellij'])
++    @CommandArgument('ide', choices=['eclipse', 'visualstudio', 'androidstudio', 'intellij', 'xcode'])
      @CommandArgument('args', nargs=argparse.REMAINDER)
-     def eclipse(self, ide, args):
+-    def eclipse(self, ide, args):
++    def ide(self, ide, args):
 +        if ide == 'xcode':
 +            backend = 'XcodeBackend'
          if ide == 'eclipse':
@@ -88,7 +75,7 @@ diff --git a/python/mozbuild/mozbuild/config_status.py b/python/mozbuild/mozbuil
 diff --git a/python/mozbuild/mozbuild/mach_commands.py b/python/mozbuild/mozbuild/mach_commands.py
 --- a/python/mozbuild/mozbuild/mach_commands.py
 +++ b/python/mozbuild/mozbuild/mach_commands.py
-@@ -574,17 +574,17 @@ class Build(MachCommandBase):
+@@ -528,23 +528,27 @@ class Build(MachCommandBase):
  
      @Command('build-backend', category='build',
          description='Generate a backend used to build the tree.')
@@ -105,5 +92,15 @@ diff --git a/python/mozbuild/mozbuild/mach_commands.py b/python/mozbuild/mozbuil
          python = self.virtualenv_manager.python_path
          config_status = os.path.join(self.topobjdir, 'config.status')
  
++        if backend == 'xcode':
++            self._activate_virtualenv()
++            self.virtualenv_manager.install_pip_package('mod-pbxproj==1.0.0')
++
          if not os.path.exists(config_status):
              print('config.status not found.  Please run |mach configure| '
+                   'or |mach build| prior to building the %s build backend.'
+                   % backend)
+             return 1
+ 
+         args = [python, config_status, '--backend=%s' % backend]
+         if diff:

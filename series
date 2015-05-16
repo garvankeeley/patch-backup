@@ -1,6 +1,6 @@
-bug1155237-part1-remove-contextless-access-to-netutils.diff
-bug1155237-part2-make-upload-service-nonsticky.diff
-bug1145111_static_cache_loc.diff
 xcode1063329-p1-add-option-to-backend.diff
 xcode1063329-p2-add-ancillary-files.diff
 xcode1063329-p3-add-xcode_backend.py
+bug1145111_static_cache_loc.diff
+xcode_from_vc.diff
+wifi_ap_telemetry.diff
