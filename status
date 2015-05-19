@@ -1,4 +1,3 @@
 ec206bf3ae1923b553fdc8b49ee2f2dc9cac0e2b:xcode1063329-p1-add-option-to-backend.diff
 d30e6fbe467a4788c01637d184d288f4c5686345:xcode1063329-p2-add-ancillary-files.diff
-c9b84a6fb52fbdea2dddc0f2ee5f2bc39d30fdde:xcode1063329-p3-add-xcode_backend.py
-05b6d0f31e8f3d2dab2af27bd35d08bd83be7757:bug1145111_static_cache_loc.diff
+1f28ebdb13672e3cf774a4ad00cddfa079b6a407:xcode1063329-p3-add-xcode_backend.py
