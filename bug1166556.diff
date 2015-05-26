@@ -1,0 +1,60 @@
+# HG changeset patch
+# User Garvan Keeley <gkeeley@mozilla.com>
+# Parent  90b163b11cadb282abb705275c69b0db839bb096
+Bug 1166556 - Don't start geolocation provider if the cached position is being used. r=jdm
+
+diff --git a/dom/geolocation/nsGeolocation.cpp b/dom/geolocation/nsGeolocation.cpp
+--- a/dom/geolocation/nsGeolocation.cpp
++++ b/dom/geolocation/nsGeolocation.cpp
+@@ -460,25 +460,17 @@ NS_IMETHODIMP
+ nsGeolocationRequest::Allow(JS::HandleValue aChoices)
+ {
+   MOZ_ASSERT(aChoices.isUndefined());
+ 
+   if (mLocator->ClearPendingRequest(this)) {
+     return NS_OK;
+   }
+ 
+-  // Kick off the geo device, if it isn't already running
+   nsRefPtr<nsGeolocationService> gs = nsGeolocationService::GetGeolocationService();
+-  nsresult rv = gs->StartDevice(GetPrincipal());
+-
+-  if (NS_FAILED(rv)) {
+-    // Location provider error
+-    NotifyError(nsIDOMGeoPositionError::POSITION_UNAVAILABLE);
+-    return NS_OK;
+-  }
+ 
+   bool canUseCache = false;
+   CachedPositionAndAccuracy lastPosition = gs->GetCachedPosition();
+   if (lastPosition.position) {
+     DOMTimeStamp cachedPositionTime_ms;
+     lastPosition.position->GetTimestamp(&cachedPositionTime_ms);
+     // check to see if we can use a cached value
+     // if the user has specified a maximumAge, return a cached value.
+@@ -492,16 +484,25 @@ nsGeolocationRequest::Allow(JS::HandleVa
+   }
+ 
+   gs->UpdateAccuracy(WantsHighAccuracy());
+   if (canUseCache) {
+     // okay, we can return a cached position
+     // getCurrentPosition requests serviced by the cache
+     // will now be owned by the RequestSendLocationEvent
+     Update(lastPosition.position);
++  } else {
++    // Kick off the geo device, if it isn't already running
++    nsresult rv = gs->StartDevice(GetPrincipal());
++
++    if (NS_FAILED(rv)) {
++      // Location provider error
++      NotifyError(nsIDOMGeoPositionError::POSITION_UNAVAILABLE);
++      return NS_OK;
++    }
+   }
+ 
+   if (mIsWatchPositionRequest || !canUseCache) {
+     // let the locator know we're pending
+     // we will now be owned by the locator
+     mLocator->NotifyAllowedRequest(this);
+   }
+ 

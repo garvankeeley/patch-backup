@@ -1,0 +1,630 @@
+# HG changeset patch
+# User Garvan Keeley <gkeeley@mozilla.com>
+# Parent  342d5c64d2ef001ca99e032429c3b78c08c83d40
+WIP
+
+diff --git a/python/mozbuild/mozbuild/backend/mach_commands.py b/python/mozbuild/mozbuild/backend/mach_commands.py
+--- a/python/mozbuild/mozbuild/backend/mach_commands.py
++++ b/python/mozbuild/mozbuild/backend/mach_commands.py
+@@ -26,17 +26,17 @@ from mach.decorators import (
+ )
+ 
+ @CommandProvider
+ class MachCommands(MachCommandBase):
+     @Command('ide', category='devenv',
+         description='Generate a project and launch an IDE.')
+     @CommandArgument('ide', choices=['eclipse', 'visualstudio', 'androidstudio', 'intellij'])
+     @CommandArgument('args', nargs=argparse.REMAINDER)
+-    def eclipse(self, ide, args):
++    def ide(self, ide, args):
+         if ide == 'xcode':
+             backend = 'XcodeBackend'
+         if ide == 'eclipse':
+             backend = 'CppEclipse'
+         elif ide == 'visualstudio':
+             backend = 'VisualStudio'
+         elif ide == 'androidstudio' or ide == 'intellij':
+             # The build backend for Android Studio and IntelliJ is just the regular one.
+diff --git a/python/mozbuild/mozbuild/backend/visualstudio.py b/python/mozbuild/mozbuild/backend/visualstudio.py
+--- a/python/mozbuild/mozbuild/backend/visualstudio.py
++++ b/python/mozbuild/mozbuild/backend/visualstudio.py
+@@ -189,59 +189,62 @@ class VisualStudioBackend(CommonBackend)
+             defines = []
+             for k, v in self._paths_to_defines.get(path, {}).items():
+                 if v is True:
+                     defines.append(k)
+                 else:
+                     defines.append('%s=%s' % (k, v))
+ 
+             basename = 'library_%s' % lib
+-            project_id = self._write_vs_project(out_dir, basename, lib,
++            project_id = self._write_ide_project(out_dir, basename, lib,
+                 includes=includes,
+                 forced_includes=['$(TopObjDir)\\dist\\include\\mozilla-config.h'],
+                 defines=defines,
+                 headers=headers,
+                 sources=sources)
+ 
+             projects[basename] = (project_id, basename, lib)
+ 
+         # Generate projects that can be used to build common targets.
+         for target in ('export', 'binaries', 'tools', 'full'):
+             basename = 'target_%s' % target
+             command = '$(SolutionDir)\\mach.bat build'
+             if target != 'full':
+                 command += ' %s' % target
+ 
+-            project_id = self._write_vs_project(out_dir, basename, target,
++            project_id = self._write_ide_project(out_dir, basename, target,
+                 build_command=command,
+                 clean_command='$(SolutionDir)\\mach.bat build clean')
+ 
+             projects[basename] = (project_id, basename, target)
+ 
+         # A project that can be used to regenerate the visual studio projects.
+         basename = 'target_vs'
+-        project_id = self._write_vs_project(out_dir, basename, 'visual-studio',
++        project_id = self._write_ide_project(out_dir, basename, 'visual-studio',
+             build_command='$(SolutionDir)\\mach.bat build-backend -b VisualStudio')
+         projects[basename] = (project_id, basename, 'visual-studio')
+ 
+         # A project to run the main application binary.
+         app_name = self.environment.substs['MOZ_APP_NAME']
+         basename = 'binary_%s' % app_name
+-        project_id = self._write_vs_project(out_dir, basename, app_name,
++        project_id = self._write_ide_project(out_dir, basename, app_name,
+             debugger=('$(TopObjDir)\\dist\\bin\\%s.exe' % app_name,
+                 '-no-remote'))
+         projects[basename] = (project_id, basename, app_name)
+ 
+         # Projects to run other common binaries.
+         for app in ['js', 'xpcshell']:
+             basename = 'binary_%s' % app
+-            project_id = self._write_vs_project(out_dir, basename, app,
++            project_id = self._write_ide_project(out_dir, basename, app,
+                 debugger=('$(TopObjDir)\\dist\\bin\\%s.exe' % app, ''))
+             projects[basename] = (project_id, basename, app)
+ 
++        self._write_others(projects, out_dir)
++
++    def _write_others(self, projects, out_dir):
+         # Write out a shared property file with common variables.
+         props_path = os.path.join(out_dir, 'mozilla.props')
+         with open(props_path, 'wb') as fh:
+             self._write_props(fh)
+ 
+         # Generate some wrapper scripts that allow us to invoke mach inside
+         # a MozillaBuild-like environment. We currently only use the batch
+         # script. We'd like to use the PowerShell script. However, it seems
+@@ -439,18 +442,21 @@ class VisualStudioBackend(CommonBackend)
+         relpath = os.path.relpath(self.environment.topsrcdir,
+             self.environment.topobjdir).replace('\\', '/')
+ 
+         # We go through mach because it has the logic for choosing the most
+         # appropriate build tool.
+         fh.write(b'"%%MOZILLABUILD%%\\msys\\bin\\bash" '
+             b'-c "%s/mach --log-no-times %%1 %%2 %%3 %%4 %%5 %%6 %%7"' % relpath)
+ 
+-    def _write_vs_project(self, out_dir, basename, name, **kwargs):
++    def _write_ide_project(self, out_dir, basename, name, **kwargs):
+         root = '%s.vcxproj' % basename
++        print basename
++        print name
++
+         with open(os.path.join(out_dir, root), 'wb') as fh:
+             project_id, name = VisualStudioBackend.write_vs_project(fh,
+                 self._version, name, **kwargs)
+ 
+         with open(os.path.join(out_dir, '%s.user' % root), 'w') as fh:
+             fh.write('<?xml version="1.0" encoding="utf-8"?>\r\n')
+             fh.write('<Project ToolsVersion="4.0" xmlns="%s">\r\n' %
+                 MSBUILD_NAMESPACE)
+@@ -519,32 +525,40 @@ class VisualStudioBackend(CommonBackend)
+         pg.setAttribute('Label', 'Configuration')
+         ct = pg.appendChild(doc.createElement('ConfigurationType'))
+         ct.appendChild(doc.createTextNode('Makefile'))
+ 
+         pg = project.appendChild(doc.createElement('PropertyGroup'))
+         pg.setAttribute('Condition', "'$(Configuration)|$(Platform)'=='Build|Win32'")
+ 
+         if build_command:
++            print "bc"
++            print build_command
+             n = pg.appendChild(doc.createElement('NMakeBuildCommandLine'))
+             n.appendChild(doc.createTextNode(build_command))
+ 
+         if clean_command:
+             n = pg.appendChild(doc.createElement('NMakeCleanCommandLine'))
+             n.appendChild(doc.createTextNode(clean_command))
+ 
+         if includes:
++            print "inc"
++            print includes
+             n = pg.appendChild(doc.createElement('NMakeIncludeSearchPath'))
+             n.appendChild(doc.createTextNode(';'.join(includes)))
+ 
+         if forced_includes:
++            print "forced"
++            print forced_includes
+             n = pg.appendChild(doc.createElement('NMakeForcedIncludes'))
+             n.appendChild(doc.createTextNode(';'.join(forced_includes)))
+ 
+         if defines:
++            print "defines"
++            print defines
+             n = pg.appendChild(doc.createElement('NMakePreprocessorDefinitions'))
+             n.appendChild(doc.createTextNode(';'.join(defines)))
+ 
+         if debugger:
+             n = pg.appendChild(doc.createElement('LocalDebuggerCommand'))
+             n.appendChild(doc.createTextNode(debugger[0]))
+ 
+             n = pg.appendChild(doc.createElement('LocalDebuggerCommandArguments'))
+@@ -561,13 +575,14 @@ class VisualStudioBackend(CommonBackend)
+         for header in sorted(headers or []):
+             n = ig.appendChild(doc.createElement('ClInclude'))
+             n.setAttribute('Include', header)
+ 
+         ig = project.appendChild(doc.createElement('ItemGroup'))
+         for source in sorted(sources or []):
+             n = ig.appendChild(doc.createElement('ClCompile'))
+             n.setAttribute('Include', source)
++            print source
+ 
+         fh.write(b'\xef\xbb\xbf')
+         doc.writexml(fh, addindent='  ', newl='\r\n')
+ 
+         return project_id, name
+diff --git a/python/mozbuild/mozbuild/backend/xcode_backend.py b/python/mozbuild/mozbuild/backend/xcode_backend.py
+--- a/python/mozbuild/mozbuild/backend/xcode_backend.py
++++ b/python/mozbuild/mozbuild/backend/xcode_backend.py
+@@ -6,31 +6,33 @@ import os
+ import types
+ import shutil
+ import re
+ from .common import CommonBackend
+ from ..frontend.data import (
+     Defines, Exports, Sources, GeneratedSources, GeneratedInclude, UnifiedSources, LocalInclude, HostSources,
+     DirectoryTraversal, PerSourceFlag, VariablePassthru, StaticLibrary)
+ from mod_pbxproj.mod_pbxproj import XcodeProject, PBXFileReference, PBXBuildFile
++from visualstudio import VisualStudioBackend
+ 
+-
+-class XcodeBackend(CommonBackend):
++class XcodeBackend(VisualStudioBackend):
+     """Backend that generates XCode project files.
+     """
+ 
+     def _init(self):
+         self._per_dir_defines_includes_and_flags = {}
+         self._per_dir_sources_and_flags = {}
+         self._topobjdir = None
+         self._topsrcdir = None
+         self._moz_app_version = None
+         self._xcode_groups = {}
++        self._source_to_unified_source = {}
++        self._written_srcs = set()
+ 
+-        CommonBackend._init(self)
++        VisualStudioBackend._init(self)
+ 
+         xcode_proj_path = os.path.join(self.environment.topobjdir, 'firefox.xcodeproj/project.pbxproj')
+         try:
+             os.mkdir(os.path.dirname(xcode_proj_path))
+         except OSError:
+             pass
+ 
+         self._current_path = os.path.dirname(os.path.realpath(__file__))
+@@ -45,16 +47,19 @@ class XcodeBackend(CommonBackend):
+         PBXFileReference.types['.cxx'] = ('sourcecode.cpp.cpp', 'PBXSourcesBuildPhase')
+ 
+         def detailed(summary):
+             return ('Generates XCode project. Files will compile, predictively show errors, and code-complete.' +
+                     ' Actually building Firefox still requires command-line mach.')
+ 
+         self.summary.backend_detailed_summary = types.MethodType(detailed, self.summary)
+ 
++    def _write_all(self, projects, out_dir):
++        return
++
+     def consume_object(self, obj):
+         obj.ack()
+ 
+         # I am treating this path as the current module, I am defining module as having a mozbuild.
+         # Sometimes cpp files are referenced like <module_dir>/file.cpp, other times,
+         # <module_dir>/a/path/to/file.cpp.
+         module_dir = getattr(obj, 'relativedir', None)
+         if not module_dir:
+@@ -62,141 +67,146 @@ class XcodeBackend(CommonBackend):
+ 
+         if not self._topsrcdir:
+             self._topsrcdir = obj.topsrcdir
+         if not self._topobjdir:
+             self._topobjdir = obj.topobjdir
+         if not self._moz_app_version:
+             self._moz_app_version = 'MOZ_APP_VERSION=\\"' + obj.config.substs["MOZ_APP_VERSION"] + '\\"'
+ 
+-        if isinstance(obj, DirectoryTraversal):
+-            self._add_per_relobjdir_build_args(obj.relobjdir, {'-I' + obj.srcdir})
++        super(self.__class__, self).consume_object(obj)
+ 
+-            objinc = self._topobjdir + "/" + module_dir
+-            if os.path.exists(objinc):
+-                self._add_per_relobjdir_build_args(obj.relobjdir, {'-I' + objinc})
++        # if isinstance(obj, DirectoryTraversal):
++        #     self._add_per_relobjdir_build_args(obj.relobjdir, {'-I' + obj.srcdir})
++        #
++        #     objinc = self._topobjdir + "/" + module_dir
++        #     if os.path.exists(objinc):
++        #         self._add_per_relobjdir_build_args(obj.relobjdir, {'-I' + objinc})
++        #
++        #     def parse_prefix_and_defines(flags, current_dir):
++        #         result = set()
++        #         flag_list = flags.split(' ')
++        #         for i in range(0, len(flag_list)):
++        #             if flag_list[i][:2] in ('-D', '-U', '-I'):
++        #                 result.add(flag_list[i])
++        #             if flag_list[i].startswith('-include'):
++        #                 path = flag_list[i + 1].replace('$(DEPTH)', current_dir)
++        #                 result.add(flag_list[i] + ' ' + path)
++        #         return result
++        #
++        #     build_args = parse_prefix_and_defines(obj.config.substs['OS_COMPILE_CFLAGS'], obj.topobjdir)
++        #     self._add_per_relobjdir_build_args(obj.relobjdir, build_args)
++        #
++        #     # todo: mystery as to why this is missing
++        #     if 'gfx' in module_dir:
++        #         self._add_per_relobjdir_build_args(obj.relobjdir, {'-I' + os.path.join(self._topobjdir, 'dist/include/cairo')})
+ 
+-            def parse_prefix_and_defines(flags, current_dir):
+-                result = set()
+-                flag_list = flags.split(' ')
+-                for i in range(0, len(flag_list)):
+-                    if flag_list[i][:2] in ('-D', '-U', '-I'):
+-                        result.add(flag_list[i])
+-                    if flag_list[i].startswith('-include'):
+-                        path = flag_list[i + 1].replace('$(DEPTH)', current_dir)
+-                        result.add(flag_list[i] + ' ' + path)
+-                return result
++        # if isinstance(obj, Exports):
++        #     for path, files in obj.exports.walk():
++        #         if not files:
++        #             continue
++        #
++        #         for f in files:
++        #             self._add_per_dir_source_and_flags(module_dir, f, self._topobjdir, obj.relobjdir, True)
+ 
+-            build_args = parse_prefix_and_defines(obj.config.substs['OS_COMPILE_CFLAGS'], obj.topobjdir)
+-            self._add_per_relobjdir_build_args(obj.relobjdir, build_args)
++        # elif isinstance(obj, VariablePassthru):
++        #
++        #     def defines_to_string(key, value):
++        #         def quote_define(val):
++        #             val = str(val)
++        #             if val.isdigit():
++        #                 return val
++        #             if val is 'True':
++        #                 return '1'
++        #             if val is 'False':
++        #                 return '0'
++        #             return "'" + val + "'"
++        #
++        #         return "-D" + str(key) + "=" + quote_define(value)
++        #
++        #     added_flags = set()
++        #     for key, value in obj.variables.items():
++        #         if isinstance(value, list):
++        #             added_flags.update(set(value))
++        #         else:
++        #             added_flags.add(defines_to_string(key, value))
++        #
++        #     pattern = re.compile(r'\S+\.js|\S+\.manifest|\S+\.py|\S+\.cpp', re.IGNORECASE)
++        #     added_flags = {x for x in added_flags if not re.match(pattern, x)}
++        #     if '-std=c99' in added_flags:
++        #         added_flags.remove('-std=c99')
++        #     self._add_per_relobjdir_build_args(obj.relobjdir, added_flags)
+ 
+-            # todo: mystery as to why this is missing
+-            if 'gfx' in module_dir:
+-                self._add_per_relobjdir_build_args(obj.relobjdir, {'-I' + os.path.join(self._topobjdir, 'dist/include/cairo')})
++        # elif isinstance(obj, PerSourceFlag):
++        #     self._add_per_dir_source_and_flags(module_dir, obj.file_name, self._topsrcdir, obj.relobjdir, True, ' '.join(obj.flags))
+ 
+-        if isinstance(obj, Exports):
+-            for path, files in obj.exports.walk():
+-                if not files:
+-                    continue
++        # elif isinstance(obj, StaticLibrary):
++        #     flags = set(obj.defines.get_defines())
++        #     if not flags:
++        #         return
++        #     self._add_per_relobjdir_build_args(obj.relobjdir, flags)
++        #
++        # elif isinstance(obj, Defines):
++        #     self._add_per_relobjdir_build_args(obj.relobjdir, set(obj.get_defines()))
+ 
+-                for f in files:
+-                    self._add_per_dir_source_and_flags(module_dir, f, self._topobjdir, obj.relobjdir, True)
++        if isinstance(obj, UnifiedSources):
++            reldir = getattr(obj, 'relativedir', None)
++            unified_files = [self._replace_topdirs(os.path.join(reldir, x[0])) for x in obj.unified_source_mapping]
++            for f in obj.files:
++                f = self._replace_topdirs(f)
++                # self._add_per_dir_source_and_flags(module_dir, f, self._topsrcdir, obj.relobjdir, is_built=False)
++                self._source_to_unified_source[(os.path.join(reldir, f))] = unified_files
++            # for file_map in obj.unified_source_mapping:
++            #     unified_file = file_map[0]
++            #     self._add_per_dir_source_and_flags(module_dir, unified_file,
++            #                                        self._topobjdir, obj.relobjdir, is_built=True)
+ 
+-        elif isinstance(obj, VariablePassthru):
++            #     # todo looking at the preprocessed output, unistd is present, however,
++            #     # without this mystery include, compilation fails
++            #     if 'Unified_cpp_xpcom_build2' in unified_file:
++            #         mystery_include = ' -include unistd.h '
++            #         self._add_per_dir_source_and_flags(module_dir, unified_file,
++            #                                            self._topobjdir, obj.relobjdir, flags=mystery_include)
++            # else:
++            #     for f in obj.files:
++            #         self._add_per_dir_source_and_flags(module_dir, f, self._topsrcdir, obj.relobjdir)
+ 
+-            def defines_to_string(key, value):
+-                def quote_define(val):
+-                    val = str(val)
+-                    if val.isdigit():
+-                        return val
+-                    if val is 'True':
+-                        return '1'
+-                    if val is 'False':
+-                        return '0'
+-                    return "'" + val + "'"
+-
+-                return "-D" + str(key) + "=" + quote_define(value)
+-
+-            added_flags = set()
+-            for key, value in obj.variables.items():
+-                if isinstance(value, list):
+-                    added_flags.update(set(value))
+-                else:
+-                    added_flags.add(defines_to_string(key, value))
+-
+-            pattern = re.compile(r'\S+\.js|\S+\.manifest|\S+\.py|\S+\.cpp', re.IGNORECASE)
+-            added_flags = {x for x in added_flags if not re.match(pattern, x)}
+-            if '-std=c99' in added_flags:
+-                added_flags.remove('-std=c99')
+-            self._add_per_relobjdir_build_args(obj.relobjdir, added_flags)
+-
+-        elif isinstance(obj, PerSourceFlag):
+-            self._add_per_dir_source_and_flags(module_dir, obj.file_name, self._topsrcdir, obj.relobjdir, True, ' '.join(obj.flags))
+-
+-        elif isinstance(obj, StaticLibrary):
+-            flags = set(obj.defines.get_defines())
+-            if not flags:
+-                return
+-            self._add_per_relobjdir_build_args(obj.relobjdir, flags)
+-
+-        elif isinstance(obj, Defines):
+-            self._add_per_relobjdir_build_args(obj.relobjdir, set(obj.get_defines()))
+-
+-        elif isinstance(obj, Sources) or isinstance(obj, GeneratedSources) \
+-                or isinstance(obj, HostSources) or isinstance(obj, UnifiedSources):
+-
+-            if isinstance(obj, UnifiedSources):
+-                for f in obj.files:
+-                    self._add_per_dir_source_and_flags(module_dir, f, self._topsrcdir, obj.relobjdir, is_built=False)
+-                for file_map in obj.unified_source_mapping:
+-                    unified_file = file_map[0]
+-                    self._add_per_dir_source_and_flags(module_dir, unified_file,
+-                                                       self._topobjdir, obj.relobjdir, is_built=True)
+-
+-                # todo looking at the preprocessed output, unistd is present, however,
+-                # without this mystery include, compilation fails
+-                if 'Unified_cpp_xpcom_build2' in unified_file:
+-                    mystery_include = ' -include unistd.h '
+-                    self._add_per_dir_source_and_flags(module_dir, unified_file,
+-                                                       self._topobjdir, obj.relobjdir, flags=mystery_include)
+-            else:
+-                for f in obj.files:
+-                    self._add_per_dir_source_and_flags(module_dir, f, self._topsrcdir, obj.relobjdir)
+-
+-        elif isinstance(obj, LocalInclude) or isinstance(obj, GeneratedInclude):
+-            topdir = obj.topsrcdir if isinstance(obj, LocalInclude) else obj.topobjdir
+-            if obj.path.startswith('/'):
+-                path = os.path.join(topdir, obj.path[1:])
+-            else:
+-                path = os.path.join(topdir, module_dir, obj.path)
+-
+-            if os.path.exists(path):
+-                self._add_per_relobjdir_build_args(obj.relobjdir, {'-I' + path})
++        # elif isinstance(obj, LocalInclude) or isinstance(obj, GeneratedInclude):
++        #     topdir = obj.topsrcdir if isinstance(obj, LocalInclude) else obj.topobjdir
++        #     if obj.path.startswith('/'):
++        #         path = os.path.join(topdir, obj.path[1:])
++        #     else:
++        #         path = os.path.join(topdir, module_dir, obj.path)
++        #
++        #     if os.path.exists(path):
++        #         self._add_per_relobjdir_build_args(obj.relobjdir, {'-I' + path})
+ 
+     def consume_finished(self):
+-        self._flush_to_xcode()
++        super(self.__class__, self).consume_finished()
+ 
+-        # For reasons unknown, various includes are missing. Adding them manually.
+-        import glob
+-        missing_topsrc_includes = glob.glob(os.path.join(self._topsrcdir, 'security/nss/lib') + "/*")
+-        # sqlite conflicts, remove it
+-        missing_topsrc_includes = [x for x in missing_topsrc_includes if 'sqlite' not in x]
+-        missing_topsrc_includes.extend(['netwerk/sctp/src',
+-                                        'ipc/chromium/src',
+-                                        'xpcom/tests',
+-                                        'security/nss/lib/freebl/ecl'])
+-        output_xcconfig = os.path.join(self._topobjdir, 'config.xcconfig')
+-        shutil.copyfile(os.path.join(self._current_path, 'templates/xcode/stub_xcconfig'), output_xcconfig)
+-        f = open(output_xcconfig, 'a')
+-        f.write("\nGCC_PREPROCESSOR_DEFINITIONS = DEBUG NO_NSPR_10_SUPPORT=1 N_UNDF=0x0 " + self._moz_app_version)
+-        f.write("\nHEADER_SEARCH_PATHS = " +
+-                ' '.join([os.path.join(self._topsrcdir, x) for x in missing_topsrc_includes]) + ' ' +
+-                os.path.join(self._topobjdir, 'dist/include/nss') + ' ' +
+-                os.path.join(self._topobjdir, 'dist/include/nspr'))
+-        f.close()
++        # self._flush_to_xcode()
++        #
++        # # For reasons unknown, various includes are missing. Adding them manually.
++        # import glob
++        # missing_topsrc_includes = glob.glob(os.path.join(self._topsrcdir, 'security/nss/lib') + "/*")
++        # # sqlite conflicts, remove it
++        # missing_topsrc_includes = [x for x in missing_topsrc_includes if 'sqlite' not in x]
++        # missing_topsrc_includes.extend(['netwerk/sctp/src',
++        #                                 'ipc/chromium/src',
++        #                                 'xpcom/tests',
++        #                                 'security/nss/lib/freebl/ecl'])
++        # output_xcconfig = os.path.join(self._topobjdir, 'config.xcconfig')
++        # shutil.copyfile(os.path.join(self._current_path, 'templates/xcode/stub_xcconfig'), output_xcconfig)
++        # f = open(output_xcconfig, 'a')
++        # f.write("\nGCC_PREPROCESSOR_DEFINITIONS = DEBUG NO_NSPR_10_SUPPORT=1 N_UNDF=0x0 " + self._moz_app_version)
++        # f.write("\nHEADER_SEARCH_PATHS = " +
++        #         ' '.join([os.path.join(self._topsrcdir, x) for x in missing_topsrc_includes]) + ' ' +
++        #         os.path.join(self._topobjdir, 'dist/include/nss') + ' ' +
++        #         os.path.join(self._topobjdir, 'dist/include/nspr'))
++        # f.close()
+ 
+         self._xcode_project.save(sort=True)
+ 
+         print 'Xcode file is at: ' + self._xcode_project.pbxproj_path
+ 
+     def _add_per_dir_source_and_flags(self, directory, file, abs_src_path, relobjdir, is_built=True, flags=''):
+         # some files can arrive as a full path to file
+         if abs_src_path in file:
+@@ -224,50 +234,50 @@ class XcodeBackend(CommonBackend):
+     def _add_per_relobjdir_build_args(self, directory, set_of_build_args):
+         if directory not in self._per_dir_defines_includes_and_flags:
+             self._per_dir_defines_includes_and_flags[directory] = list(set_of_build_args)
+         else:
+             existing = self._per_dir_defines_includes_and_flags[directory]
+             args = [x for x in set_of_build_args if x not in existing]
+             self._per_dir_defines_includes_and_flags[directory].extend(args)
+ 
+-    def _get_or_create_xcode_group(self, abs_src_path, sub_path, depth=0):
+-        if not sub_path or len(sub_path) < 2:
++    def _get_or_create_xcode_group(self, path):
++        if os.path.splitext(path)[-1]:
++            path = os.path.dirname(path)
++        if not path or len(path) < 2 or self._topsrcdir == path:
+             return None
+ 
+-        path = os.path.join(abs_src_path, sub_path)
+-
+         if path in self._xcode_groups:
+             return self._xcode_groups[path]
+ 
+         parent_group = None
+-        if '/' in sub_path:
+-            parent_group = self._get_or_create_xcode_group(abs_src_path, os.path.dirname(sub_path), depth + 1)
++        if '/' in path:
++            parent_group = self._get_or_create_xcode_group(os.path.dirname(path))
+ 
+-        leaf_dir_name = os.path.basename(sub_path)
+-        group = self._xcode_project.get_or_create_group(leaf_dir_name, path, parent_group)
++        name = os.path.basename(path)
++        group = self._xcode_project.get_or_create_group(name, path, parent_group)
+         self._xcode_groups[path] = group
+         return group
+ 
+     def _add_group_to_xcode(self, abs_path_to_srcs, sub_path, file):
+         if '/' in file:
+             folder = os.path.dirname(file)
+             sub_path = os.path.join(sub_path, folder)
+ 
+         group = self._get_or_create_xcode_group(abs_path_to_srcs, sub_path)
+         return group
+ 
+     def _add_file_to_xcode_group(self, group, full_path_to_file, is_built, flags):
+         result = self._xcode_project.add_file(full_path_to_file, group,
+                                               create_build_files=is_built, ignore_unknown_type=True)
+-        if len(result) == 0:
++        if len(result) == 0 or not is_built or not flags:
+             return
+ 
+         for item in result:
+-            if isinstance(item, PBXBuildFile) and flags:
++            if isinstance(item, PBXBuildFile):
+                 item.add_compiler_flag(flags)
+ 
+     def _flush_to_xcode(self):
+         for module, files_and_flags in self._per_dir_sources_and_flags.items():
+             for f, flags in files_and_flags.items():
+                 group = self._add_group_to_xcode(flags['abs_src_path'], module, f)
+                 compiler_flags = flags['flags']
+                 if flags['relobjdir'] in self._per_dir_defines_includes_and_flags:
+@@ -276,9 +286,67 @@ class XcodeBackend(CommonBackend):
+                     # add these at end, or files in these paths will conflict
+                     compiler_flags += ' -I{0}/intl/icu/source/common -I{0}/intl/icu/source/i18n'.format(self._topsrcdir) + \
+                                       ' -I' + os.path.join(self._topobjdir, 'dist/include')
+ 
+                 # It seemed xcode treats double spaces between flags as terminators, so  remove those,
+                 # and cleanup any includes with trailing slashes, for aesthetics.
+                 compiler_flags = compiler_flags.replace('  -', ' -').replace('/ -', ' -')
+                 full_path = os.path.join(flags['abs_src_path'], module + '/' + f)
+-                self._add_file_to_xcode_group(group, full_path, flags['is_built'], compiler_flags)
+\ No newline at end of file
++                self._add_file_to_xcode_group(group, full_path, flags['is_built'], compiler_flags)
++
++    def _write_others(self, projects, out_dir):
++        return
++
++    def _replace_topdirs(self, path):
++        path = path.replace('\\', '/')
++        path = path.replace('$(LIBXUL_DIST)', self._topobjdir)
++        return path.replace('$(TopObjDir)', self._topobjdir).replace('$(TopSrcDir)', self._topsrcdir)
++
++    def _write_ide_project(self, out_dir, basename, name,
++                            includes=[],
++                            forced_includes=[], defines=[],
++                            build_command=None, clean_command=None,
++                            debugger=None, headers=[], sources=[]):
++        if name in ('export', 'binaries', 'tools', 'full', 'visual-studio', 'firefox'):
++            return
++
++        forced_includes = self._replace_topdirs(''.join(forced_includes))
++        if '$(DefaultIncludes)' in includes:
++            includes.remove('$(DefaultIncludes)')
++
++        includes += ['/$(TopObjDir)/ipc/ipdl/_ipdlheaders']
++        includes = self._replace_topdirs(' -I'.join(includes))
++
++        defines += ['STATIC_EXPORTABLE_JS_API', 'MOZILLA_INTERNAL_API', 'IMPL_LIBXUL']
++        defines = ' -D'.join(defines)
++
++        flags = '-include ' + forced_includes
++        flags += ' -D' + defines
++        flags += ' -I' + includes
++
++        unified_list = set()
++
++        # lookup source in unified list
++        for src in sources:
++            src = self._replace_topdirs(src)
++
++            if 'ArchiveReader.cpp' in src:
++                print ''
++
++            if src in self._written_srcs:
++                continue
++            self._written_srcs.add(src)
++
++            group = self._get_or_create_xcode_group(os.path.dirname(src))
++            is_built = False
++            if src in self._source_to_unified_source:
++                unified = self._source_to_unified_source[src]
++                if unified[0] not in unified_list:
++                    unified_list.add(unified[0])
++                    # add the unified file
++                    for f in unified:
++                        f = os.path.join(self._topobjdir, f)
++                        self._add_file_to_xcode_group(group, f, True, flags=flags)
++            else:
++                is_built = True
++
++            self._add_file_to_xcode_group(group, src, is_built=is_built, flags=flags)
+\ No newline at end of file

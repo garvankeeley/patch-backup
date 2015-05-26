@@ -1,0 +1,31 @@
+# HG changeset patch
+# User Garvan Keeley <gkeeley@mozilla.com>
+# Parent  8004242e8e8935ab0b73e9f250141acc371c2203
+Bug 1145111: ensure the pos. cache isn't reset when nsGeolocationService shuts down provider. r=jdm
+After 6 seconds of idle, nsGeolocationService shuts down its provider, and was unintenionally
+clearing the position cache.
+
+diff --git a/dom/geolocation/nsGeolocation.cpp b/dom/geolocation/nsGeolocation.cpp
+--- a/dom/geolocation/nsGeolocation.cpp
++++ b/dom/geolocation/nsGeolocation.cpp
+@@ -954,17 +953,19 @@ nsGeolocationService::Observe(nsISupport
+   }
+ 
+   return NS_ERROR_FAILURE;
+ }
+ 
+ NS_IMETHODIMP
+ nsGeolocationService::Update(nsIDOMGeoPosition *aSomewhere)
+ {
+-  SetCachedPosition(aSomewhere);
++  if (aSomewhere) {
++    SetCachedPosition(aSomewhere);
++  }
+ 
+   for (uint32_t i = 0; i< mGeolocators.Length(); i++) {
+     mGeolocators[i]->Update(aSomewhere);
+   }
+   return NS_OK;
+ }
+ 
+ NS_IMETHODIMP

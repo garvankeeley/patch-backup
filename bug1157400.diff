@@ -1,0 +1,129 @@
+# HG changeset patch
+# User Garvan Keeley <gkeeley@mozilla.com>
+# Parent  447ca8005229aac0c859ff0e813278f55fb29975
+Bug 1157400 - Port Chromium WinXP wifi scanner to gecko - r=tabraldes
+
+diff --git a/netwerk/wifi/moz.build b/netwerk/wifi/moz.build
+--- a/netwerk/wifi/moz.build
++++ b/netwerk/wifi/moz.build
+@@ -39,16 +39,17 @@ elif CONFIG['OS_ARCH'] in ('DragonFly', 
+     UNIFIED_SOURCES += [
+         'nsWifiScannerFreeBSD.cpp',
+     ]
+ elif CONFIG['OS_ARCH'] == 'WINNT':
+     UNIFIED_SOURCES += [
+         'nsWifiScannerWin.cpp',
+         'win_wifiScanner.cpp',
+         'win_wlanLibrary.cpp',
++        'win_xp_wifiScanner.cpp'
+     ]
+ elif CONFIG['OS_ARCH'] == 'SunOS':
+     CXXFLAGS += CONFIG['GLIB_CFLAGS']
+     UNIFIED_SOURCES += [
+         'nsWifiScannerSolaris.cpp',
+     ]
+ 
+ if CONFIG['NECKO_WIFI_DBUS']:
+diff --git a/netwerk/wifi/nsWifiMonitor.h b/netwerk/wifi/nsWifiMonitor.h
+--- a/netwerk/wifi/nsWifiMonitor.h
++++ b/netwerk/wifi/nsWifiMonitor.h
+@@ -71,17 +71,17 @@ class nsWifiMonitor final : nsIRunnable,
+   mozilla::Atomic<bool> mThreadComplete;
+   nsCOMPtr<nsIThread> mThread;
+ 
+   nsTArray<nsWifiListener> mListeners;
+ 
+   mozilla::ReentrantMonitor mReentrantMonitor;
+ 
+ #ifdef XP_WIN
+-  nsAutoPtr<WinWifiScanner> mWinWifiScanner;
++  nsAutoPtr<WindowsWifiScannerInterface> mWinWifiScanner;
+ #endif
+ };
+ #else
+ #include "nsIWifi.h"
+ class nsWifiMonitor final : nsIWifiMonitor, nsIWifiScanResultsReady, nsIObserver
+ {
+  public:
+   NS_DECL_ISUPPORTS
+diff --git a/netwerk/wifi/nsWifiScannerWin.cpp b/netwerk/wifi/nsWifiScannerWin.cpp
+--- a/netwerk/wifi/nsWifiScannerWin.cpp
++++ b/netwerk/wifi/nsWifiScannerWin.cpp
+@@ -7,34 +7,43 @@
+ // moz headers (alphabetical)
+ #include "nsAutoPtr.h"
+ #include "nsCOMArray.h"
+ #include "nsComponentManagerUtils.h"
+ #include "nsIMutableArray.h"
+ #include "nsServiceManagerUtils.h"
+ #include "nsWifiAccessPoint.h"
+ #include "win_wifiScanner.h"
++#include "win_xp_wifiScanner.h"
++#include "mozilla/WindowsVersion.h"
+ 
+ using namespace mozilla;
+ 
++PRLogModuleInfo* prlog = 0;
++
+ /**
+  * `nsWifiMonitor` is declared in the cross-platform nsWifiMonitor.h and
+  * is mostly defined in the cross-platform nsWifiMonitor.cpp. This function
+  * is implemented in various platform-specific files but the implementation
+  * is almost identical in each file. We relegate the Windows-specific
+  * work to the `WinWifiScanner` class and deal with non-Windows-specific
+  * issues like calling listeners here. Hopefully this file can be merged
+  * with the other implementations of `nsWifiMonitor::DoScan` since a lot
+  * of the code is identical
+  */
+ nsresult
+ nsWifiMonitor::DoScan()
+ {
+     if (!mWinWifiScanner) {
+-      mWinWifiScanner = new WinWifiScanner();
++      if (IsWin2003OrLater()) {
++        mWinWifiScanner = new WinWifiScanner();
++      } else {
++        mWinWifiScanner = new WinXPWifiScanner();
++      }
++
+       if (!mWinWifiScanner) {
+         // TODO: Probably return OOM error
+         return NS_ERROR_FAILURE;
+       }
+     }
+ 
+     // Regularly get the access point data.
+ 
+diff --git a/netwerk/wifi/win_wifiScanner.h b/netwerk/wifi/win_wifiScanner.h
+--- a/netwerk/wifi/win_wifiScanner.h
++++ b/netwerk/wifi/win_wifiScanner.h
+@@ -6,20 +6,27 @@
+ 
+ // Moz headers (alphabetical)
+ #include "nsAutoPtr.h"
+ #include "nsCOMArray.h"
+ #include "win_wlanLibrary.h"
+ 
+ class nsWifiAccessPoint;
+ 
+-class WinWifiScanner {
++// This class allows the wifi monitor to use WinWifiScanner and WinXPWifiScanner interchangeably.
++class WindowsWifiScannerInterface {
++public:
++  virtual nsresult GetAccessPointsFromWLAN(nsCOMArray<nsWifiAccessPoint> &accessPoints) = 0;
++};
++
++
++class WinWifiScanner : public WindowsWifiScannerInterface {
+  public:
+   WinWifiScanner();
+-  ~WinWifiScanner();
++  virtual ~WinWifiScanner();
+ 
+   /**
+    * GetAccessPointsFromWLAN
+    *
+    * Scans the available wireless interfaces for nearby access points and
+    * populates the supplied collection with them
+    *
+    * @param accessPoints The collection to populate with available APs
