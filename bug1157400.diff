@@ -49,7 +49,7 @@ diff --git a/netwerk/wifi/nsWifiMonitor.h b/netwerk/wifi/nsWifiMonitor.h
 diff --git a/netwerk/wifi/nsWifiScannerWin.cpp b/netwerk/wifi/nsWifiScannerWin.cpp
 --- a/netwerk/wifi/nsWifiScannerWin.cpp
 +++ b/netwerk/wifi/nsWifiScannerWin.cpp
-@@ -7,34 +7,43 @@
+@@ -7,16 +7,18 @@
  // moz headers (alphabetical)
  #include "nsAutoPtr.h"
  #include "nsCOMArray.h"
@@ -63,14 +63,12 @@ diff --git a/netwerk/wifi/nsWifiScannerWin.cpp b/netwerk/wifi/nsWifiScannerWin.c
  
  using namespace mozilla;
  
-+PRLogModuleInfo* prlog = 0;
-+
  /**
   * `nsWifiMonitor` is declared in the cross-platform nsWifiMonitor.h and
   * is mostly defined in the cross-platform nsWifiMonitor.cpp. This function
   * is implemented in various platform-specific files but the implementation
   * is almost identical in each file. We relegate the Windows-specific
-  * work to the `WinWifiScanner` class and deal with non-Windows-specific
+@@ -24,17 +26,22 @@ using namespace mozilla;
   * issues like calling listeners here. Hopefully this file can be merged
   * with the other implementations of `nsWifiMonitor::DoScan` since a lot
   * of the code is identical
@@ -546,8 +544,8 @@ new file mode 100644
 +* License, v. 2.0. If a copy of the MPL was not distributed with this
 +* file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 +
-+#ifndef __winxpwifiscanner__
-+#define __winxpwifiscanner__
++#ifndef winxpwifiscanner_h_
++#define winxpwifiscanner_h_
 +
 +#include "nsAutoPtr.h"
 +#include "nsCOMArray.h"
