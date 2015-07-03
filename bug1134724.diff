@@ -1,0 +1,83 @@
+# HG changeset patch
+# User Garvan Keeley <gkeeley@mozilla.com>
+# Parent  9abbf4032e9efcea2afc5168025004bcd26a40ed
+Bug 1134724: guard against geo responses faster than 1Hz. r=jdm
+
+diff --git a/dom/geolocation/nsGeolocation.cpp b/dom/geolocation/nsGeolocation.cpp
+--- a/dom/geolocation/nsGeolocation.cpp
++++ b/dom/geolocation/nsGeolocation.cpp
+@@ -109,16 +109,17 @@ class nsGeolocationRequest final
+   GeoPositionErrorCallback mErrorCallback;
+   nsAutoPtr<PositionOptions> mOptions;
+ 
+   nsRefPtr<Geolocation> mLocator;
+ 
+   int32_t mWatchId;
+   bool mShutdown;
+   nsCOMPtr<nsIContentPermissionRequester> mRequester;
++  bool mIsRescheduledDueToExcessiveFrequency;
+ };
+ 
+ static PositionOptions*
+ CreatePositionOptionsCopy(const PositionOptions& aOptions)
+ {
+   nsAutoPtr<PositionOptions> geoOptions(new PositionOptions());
+ 
+   geoOptions->mEnableHighAccuracy = aOptions.mEnableHighAccuracy;
+@@ -352,17 +353,18 @@ nsGeolocationRequest::nsGeolocationReque
+                                            bool aWatchPositionRequest,
+                                            int32_t aWatchId)
+   : mIsWatchPositionRequest(aWatchPositionRequest),
+     mCallback(aCallback),
+     mErrorCallback(aErrorCallback),
+     mOptions(aOptions),
+     mLocator(aLocator),
+     mWatchId(aWatchId),
+-    mShutdown(false)
++    mShutdown(false),
++    mIsRescheduledDueToExcessiveFrequency(false)
+ {
+   nsCOMPtr<nsIDOMWindow> win = do_QueryReferent(mLocator->GetOwner());
+   if (win) {
+     nsCOMPtr<nsPIDOMWindow> window = do_QueryInterface(win);
+     if (window) {
+       mRequester = new nsContentPermissionRequester(window);
+     }
+   }
+@@ -611,22 +613,35 @@ nsGeolocationRequest::AdjustedLocation(n
+ void
+ nsGeolocationRequest::SendLocation(nsIDOMGeoPosition* aPosition)
+ {
+   if (mShutdown) {
+     // Ignore SendLocationEvents issued before we were cleared.
+     return;
+   }
+ 
++  static long lastFuncCallTime_ms = 0;
++  const long kTimeNow_ms = PR_Now() / PR_USEC_PER_MSEC;
++  bool isFrequencyExcessive = kTimeNow_ms - lastFuncCallTime_ms < 1000;
++  lastFuncCallTime_ms = kTimeNow_ms;
++
++  if (isFrequencyExcessive && !mIsRescheduledDueToExcessiveFrequency) {
++    nsCOMPtr<nsIRunnable> ev = new RequestSendLocationEvent(aPosition, this);
++    mIsRescheduledDueToExcessiveFrequency = true;
++    NS_DispatchToMainThread(ev);
++    return;
++  }
++  mIsRescheduledDueToExcessiveFrequency = false;
++
+   if (mOptions && mOptions->mMaximumAge > 0) {
+     DOMTimeStamp positionTime_ms;
+     aPosition->GetTimestamp(&positionTime_ms);
+     const uint32_t maximumAge_ms = mOptions->mMaximumAge;
+     const bool isTooOld =
+-        DOMTimeStamp(PR_Now() / PR_USEC_PER_MSEC - maximumAge_ms) > positionTime_ms;
++        DOMTimeStamp(kTimeNow_ms - maximumAge_ms) > positionTime_ms;
+     if (isTooOld) {
+       return;
+     }
+   }
+ 
+   nsRefPtr<Position> wrapped;
+ 
+   if (aPosition) {

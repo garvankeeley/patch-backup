@@ -1,7 +1,7 @@
-# HG changeset patch
+# HG changeset patch 
 # User Garvan Keeley <gkeeley@mozilla.com>
-# Parent  ff2e0722804149cc85a6f4a26ae9983a10e4800c
-Bug 1157400 - Port Chromium WinXP wifi scanner to gecko. r=tabraldes
+# Parent  3402e1924f9d5c822eb7d64ce0f377a720ea7538
+Bug 1157400 - Port Chromium WinXP wifi scanner to gecko. r=mcmanus
 
 diff --git a/netwerk/wifi/moz.build b/netwerk/wifi/moz.build
 --- a/netwerk/wifi/moz.build
@@ -68,7 +68,7 @@ diff --git a/netwerk/wifi/nsWifiScannerWin.cpp b/netwerk/wifi/nsWifiScannerWin.c
   * is mostly defined in the cross-platform nsWifiMonitor.cpp. This function
   * is implemented in various platform-specific files but the implementation
   * is almost identical in each file. We relegate the Windows-specific
-@@ -24,17 +26,22 @@ using namespace mozilla;
+@@ -24,17 +26,24 @@ using namespace mozilla;
   * issues like calling listeners here. Hopefully this file can be merged
   * with the other implementations of `nsWifiMonitor::DoScan` since a lot
   * of the code is identical
@@ -80,8 +80,10 @@ diff --git a/netwerk/wifi/nsWifiScannerWin.cpp b/netwerk/wifi/nsWifiScannerWin.c
 -      mWinWifiScanner = new WinWifiScanner();
 +      if (IsWin2003OrLater()) {
 +        mWinWifiScanner = new WinWifiScanner();
++        LOG(("Using Windows 2003+ wifi scanner."));
 +      } else {
 +        mWinWifiScanner = new WinXPWifiScanner();
++        LOG(("Using Windows XP wifi scanner."));
 +      }
 +
        if (!mWinWifiScanner) {
@@ -125,4 +127,3 @@ diff --git a/netwerk/wifi/win_wifiScanner.h b/netwerk/wifi/win_wifiScanner.h
     * populates the supplied collection with them
     *
     * @param accessPoints The collection to populate with available APs
-

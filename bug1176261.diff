@@ -1,0 +1,30 @@
+# HG changeset patch
+# User Garvan Keeley <gkeeley@mozilla.com>
+# Parent  f8de1464929b3c73a3cba30a982e4aad733eb724
+Bug 1176261. Discard gps with impossibly tiny accuracy. r=jaliu
+
+diff --git a/dom/system/gonk/GonkGPSGeolocationProvider.cpp b/dom/system/gonk/GonkGPSGeolocationProvider.cpp
+--- a/dom/system/gonk/GonkGPSGeolocationProvider.cpp
++++ b/dom/system/gonk/GonkGPSGeolocationProvider.cpp
+@@ -110,16 +110,21 @@ GonkGPSGeolocationProvider::LocationCall
+       return NS_OK;
+     }
+   private:
+     nsRefPtr<nsGeoPosition> mPosition;
+   };
+ 
+   MOZ_ASSERT(location);
+ 
++  const float kImpossibleAccuracy_m = 0.001;
++  if (location->accuracy < kImpossibleAccuracy_m) {
++    return;
++  }
++
+   nsRefPtr<nsGeoPosition> somewhere = new nsGeoPosition(location->latitude,
+                                                         location->longitude,
+                                                         location->altitude,
+                                                         location->accuracy,
+                                                         location->accuracy,
+                                                         location->bearing,
+                                                         location->speed,
+                                                         PR_Now() / PR_USEC_PER_MSEC);

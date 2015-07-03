@@ -1,13 +1,13 @@
-# HG changeset patch
+# HG changeset patch 
 # User Garvan Keeley <gkeeley@mozilla.com>
-# Parent  ff2e0722804149cc85a6f4a26ae9983a10e4800c
-Bug 1157400 - Part1: port chromium XP wifi scanning code. r=tabraldes
+# Parent  9eae3880b132898a96a80d497cba2b9523e049a4
+Bug 1157400 - Part1: port chromium XP wifi scanning code. r=mcmanus
 
 diff --git a/netwerk/wifi/win_xp_wifiScanner.cpp b/netwerk/wifi/win_xp_wifiScanner.cpp
 new file mode 100644
 --- /dev/null
 +++ b/netwerk/wifi/win_xp_wifiScanner.cpp
-@@ -0,0 +1,404 @@
+@@ -0,0 +1,399 @@
 +// Copyright (c) 2010 The Chromium Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -34,6 +34,7 @@ new file mode 100644
 +// MOZILLA NOTE:
 +// This code is ported from chromium:
 +// https://chromium.googlesource.com/chromium/src/+/master/content/browser/geolocation/wifi_data_provider_win.cc
++// Based on changeset 42c5878
 +
 +#include "win_xp_wifiScanner.h"
 +#include "nsWifiAccessPoint.h"
@@ -54,12 +55,6 @@ new file mode 100644
 +
 +// Length for generic string buffers passed to Win32 APIs.
 +const int kStringLength = 512;
-+
-+// The time periods, in milliseconds, between successive polls of the wifi data.
-+const int kDefaultPollingInterval = 10000;  // 10s
-+const int kNoChangePollingInterval = 120000;  // 2 mins
-+const int kTwoNoChangePollingInterval = 600000;  // 10 mins
-+const int kNoWifiPollingIntervalMilliseconds = 20 * 1000; // 20s
 +
 +// WlanOpenHandle
 +typedef DWORD (WINAPI* WlanOpenHandleFunction)(DWORD dwClientVersion,
@@ -412,7 +407,6 @@ new file mode 100644
 +
 +  return NS_OK;
 +}
-\ No newline at end of file
 diff --git a/netwerk/wifi/win_xp_wifiScanner.h b/netwerk/wifi/win_xp_wifiScanner.h
 new file mode 100644
 --- /dev/null
@@ -422,8 +416,8 @@ new file mode 100644
 +* License, v. 2.0. If a copy of the MPL was not distributed with this
 +* file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 +
-+#ifndef winxpwifiscanner_h_
-+#define winxpwifiscanner_h_
++#ifndef WINXPWIFISCANNER_H_
++#define WINXPWIFISCANNER_H_
 +
 +#include "nsAutoPtr.h"
 +#include "nsCOMArray.h"

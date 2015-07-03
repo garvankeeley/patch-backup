@@ -1,9 +1,13 @@
+bug1167614.diff
+bug1176261.diff
 bug1157400_chromium.diff
 bug1157400.diff
-bug1166773_combain.diff
+bug1134724.diff
 xcode1063329-p1-add-option-to-backend.diff
 xcode1063329-p2-add-ancillary-files.diff
 xcode1063329-p3-add-xcode_backend.py
+bug995697.diff
+bug1166773_combain.diff
 bug1166556.diff
 bug1145111.diff
 xcode_from_vc.diff
